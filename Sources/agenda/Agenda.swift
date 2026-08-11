@@ -39,6 +39,7 @@ struct AgendaCommand: AsyncParsableCommand {
             DeleteCommand.self,
             CalendarsCommand.self,
             DoctorCommand.self,
+            DescribeCommand.self,
             MCPCommand.self
         ],
         defaultSubcommand: EventsCommand.self

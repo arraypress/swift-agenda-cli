@@ -49,9 +49,35 @@ dependencies: [
 
 ### From source
 
+Build the release binary and put it somewhere on your `PATH`:
+
 ```bash
 swift build -c release
-cp .build/release/agenda /usr/local/bin/
+mkdir -p "$HOME/.local/bin"
+cp .build/release/agenda "$HOME/.local/bin/agenda"
+```
+
+If `~/.local/bin` is not on your `PATH`, add it and reload:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Or system-wide, if you would rather not touch your shell config:
+
+```bash
+sudo cp .build/release/agenda /usr/local/bin/agenda
+```
+
+Build from the package root. The Info.plist is embedded by a linker flag with a
+path relative to it, and that is what makes the permission prompts appear at
+all — see the note under **Requirements**.
+
+Check it worked before anything else:
+
+```bash
+agenda doctor
 ```
 
 ## Usage
@@ -139,6 +165,15 @@ try Agenda.createEvent(EventDraft(
     calendar: "Work"
 ))
 ```
+
+## For agents
+
+```bash
+agenda describe --json          # every command and argument
+agenda mcp                      # the same, over MCP on stdio
+```
+
+`describe` is built from the parser's own definitions, so it cannot drift from what the tool accepts.
 
 ## MCP
 

@@ -1,0 +1,394 @@
+#compdef agenda
+
+__agenda_complete() {
+    local -ar non_empty_completions=("${@:#(|:*)}")
+    local -ar empty_completions=("${(M)@:#(|:*)}")
+    _describe -V '' non_empty_completions -- empty_completions -P $'\'\''
+}
+
+__agenda_custom_complete() {
+    local -a completions
+    completions=("${(@f)"$("${command_name}" "${@}" "${command_line[@]}")"}")
+    if [[ "${#completions[@]}" -gt 1 ]]; then
+        __agenda_complete "${completions[@]:0:-1}"
+    fi
+}
+
+__agenda_cursor_index_in_current_word() {
+    if [[ -z "${QIPREFIX}${IPREFIX}${PREFIX}" ]]; then
+        printf 0
+    else
+        printf %s "${#${(z)LBUFFER}[-1]}"
+    fi
+}
+
+_agenda() {
+    emulate -RL zsh -G
+    setopt extendedglob nullglob numericglobsort
+    unsetopt aliases banghist
+
+    local -xr SAP_SHELL=zsh
+    local -x SAP_SHELL_VERSION
+    SAP_SHELL_VERSION="$(builtin emulate zsh -c 'printf %s "${ZSH_VERSION}"')"
+    local -r SAP_SHELL_VERSION
+
+    local context state state_descr line
+    local -A opt_args
+
+    local -r command_name="${words[1]}"
+    local -ar command_line=("${words[@]}")
+    local -ir current_word_index="$((CURRENT - 1))"
+
+    local -i ret=1
+    local -ar arg_specs=(
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+        '(-): :->command'
+        '(-)*:: :->arg'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+    case "${state}" in
+    command)
+        local -ar subcommands=(
+            'events:List calendar events.'
+            'today:Everything on today — events, plus reminders due.'
+            'tomorrow:Everything on tomorrow — events, plus reminders due.'
+            'reminders:List reminders.'
+            'search:Find events and reminders matching some text.'
+            'free:Find gaps long enough to schedule something.'
+            'add:Create an event, or a reminder with --remind.'
+            'done:Mark a reminder complete.'
+            'edit:Change an existing reminder.'
+            'move:Reschedule or edit an existing event.'
+            'delete:Delete an event or reminder by id.'
+            'calendars:List calendars, or reminder lists with --reminders.'
+            'doctor:Check calendar and reminder permissions.'
+            'describe:Describe this tool'\''s commands in machine-readable form.'
+            'mcp:Serve calendar and reminder tools over MCP (stdio).'
+            'help:Show subcommand help information.'
+        )
+        _describe -V subcommand subcommands && ret=0
+        ;;
+    arg)
+        case "${words[1]}" in
+        events|today|tomorrow|reminders|search|free|add|done|edit|move|delete|calendars|doctor|describe|mcp|help)
+            "_agenda_${words[1]}" && ret=0
+            ;;
+        esac
+        ;;
+    esac
+
+    return "${ret}"
+}
+
+_agenda_events() {
+    local -i ret=1
+    local -ar arg_specs=(
+        '--next[Window forward from now\: 4h, 7d, 2w.]:next:'
+        '--from[Range start\: today, monday, 2026-07-19. Overrides --next.]:from:'
+        '--to[Range end\: friday, +2w, 2026-07-26. Overrides --next.]:to:'
+        '*--calendar[Restrict to a calendar by title or id. Repeatable.]:calendar:'
+        '--conflicts[Only events that overlap another event.]'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_today() {
+    local -i ret=1
+    local -ar arg_specs=(
+        '--events[Events only.]'
+        '--reminders[Reminders only.]'
+        '*--calendar[Restrict to a calendar or list. Repeatable.]:calendar:'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_tomorrow() {
+    local -i ret=1
+    local -ar arg_specs=(
+        '--events[Events only.]'
+        '--reminders[Reminders only.]'
+        '*--calendar[Restrict to a calendar or list. Repeatable.]:calendar:'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_reminders() {
+    local -i ret=1
+    local -ar arg_specs=(
+        '*--list[Restrict to a list by title or id. Repeatable.]:list:'
+        '--due[Only reminders due within this window\: 24h, 7d.]:due:'
+        '--overdue[Only reminders past their due date.]'
+        '--all[Include completed reminders.]'
+        '--limit[Maximum rows to return.]:limit:'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_search() {
+    local -i ret=1
+    local -ar arg_specs=(
+        ':query:'
+        '--within[How far ahead to search\: 30d, 6m, 1y.]:within:'
+        '--past[How far back to search.]:past:'
+        '--events[Search events only.]'
+        '--reminders[Search reminders only.]'
+        '*--calendar[Restrict to a calendar or list. Repeatable.]:calendar:'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_free() {
+    local -i ret=1
+    local -ar arg_specs=(
+        ':length:'
+        '--within[How far ahead to look\: 7d, 2w.]:within:'
+        '--start-hour[Working day start hour, 0-23.]:start-hour:'
+        '--end-hour[Working day end hour, 0-23.]:end-hour:'
+        '--any-time[Ignore working hours and weekends.]'
+        '--first[Return only the first matching slot.]'
+        '*--calendar[Restrict to a calendar by title or id. Repeatable.]:calendar:'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_add() {
+    local -i ret=1
+    local -ar ___availability=('busy' 'free' 'tentative' 'unavailable')
+    local -ar ___repeat=('daily' 'weekly' 'monthly' 'yearly')
+    local -ar arg_specs=(
+        ':title:'
+        '--at[Start\: now, tomorrow 9am, next friday, +2d, or ISO 8601. Defaults to now.]:at:'
+        '--for[Duration\: 30m, 1h. Ignored with --remind.]:for:'
+        '--remind[Create a reminder instead of an event.]'
+        '--all-day[All-day event.]'
+        '(--calendar --list)'{--calendar,--list}'[Target calendar, or reminder list with --remind.]:calendar:'
+        '--location[Location.]:location:'
+        '--notes[Notes.]:notes:'
+        '*--alert[Alert before start\: 15m, 1h, 1d. Repeatable. Use 0 for at-start.]:alert:'
+        '*--alert-at[Geofenced alert\: enter\:LAT,LON\[,RADIUS\]\[,TITLE\]. Repeatable.]:alert-at:'
+        '--availability[Free/busy marking\: busy | free | tentative | unavailable.]:availability:{__agenda_complete "${___availability[@]}"}'
+        '--priority[Priority for reminders, 1 (highest) to 9.]:priority:'
+        '--dry-run[Print what would be created without saving.]'
+        '--repeat[Repeat\: daily | weekly | monthly | yearly.]:repeat:{__agenda_complete "${___repeat[@]}"}'
+        '--every[Repeat every N periods, e.g. --every 2 with --repeat weekly.]:every:'
+        '--on[Weekdays, comma-separated\: MO,WE,FR.]:on:'
+        '--on-day[Days of the month\: 1,15 or '\''last'\''.]:on-day:'
+        '--nth[Which occurrence in the period\: first | second | third | fourth | last.]:nth:'
+        '--until[Stop repeating after this date (ISO 8601).]:until:'
+        '--times[Stop after this many occurrences.]:times:'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_done() {
+    local -i ret=1
+    local -ar arg_specs=(
+        ':id:'
+        '--undo[Reopen the reminder instead of completing it.]'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_edit() {
+    local -i ret=1
+    local -ar ___repeat=('daily' 'weekly' 'monthly' 'yearly')
+    local -ar arg_specs=(
+        ':id:'
+        '--title[New title.]:title:'
+        '--due[New due date\: tomorrow 9am, next friday, +2d, or ISO 8601.]:due:'
+        '--clear-due[Remove the due date, leaving it unscheduled.]'
+        '--start[New start date — when it becomes actionable.]:start:'
+        '--all-day[Make the due date all-day, with no time.]'
+        '--priority[New priority, 1 (highest) to 9, or 0 to clear.]:priority:'
+        '--notes[New notes.]:notes:'
+        '--list[Move to this reminder list.]:list:'
+        '*--alert[Replace alerts\: 15m, 1h. Repeatable.]:alert:'
+        '--clear-alerts[Remove all alerts.]'
+        '--clear-repeat[Stop it repeating.]'
+        '--repeat[Repeat\: daily | weekly | monthly | yearly.]:repeat:{__agenda_complete "${___repeat[@]}"}'
+        '--every[Repeat every N periods, e.g. --every 2 with --repeat weekly.]:every:'
+        '--on[Weekdays, comma-separated\: MO,WE,FR.]:on:'
+        '--on-day[Days of the month\: 1,15 or '\''last'\''.]:on-day:'
+        '--nth[Which occurrence in the period\: first | second | third | fourth | last.]:nth:'
+        '--until[Stop repeating after this date (ISO 8601).]:until:'
+        '--times[Stop after this many occurrences.]:times:'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_move() {
+    local -i ret=1
+    local -ar ___availability=('busy' 'free' 'tentative' 'unavailable')
+    local -ar ___repeat=('daily' 'weekly' 'monthly' 'yearly')
+    local -ar ___span=('this' 'future')
+    local -ar arg_specs=(
+        ':id:'
+        '--to[New start\: tomorrow 9am, next friday, +2d, or ISO 8601. Duration is preserved.]:to:'
+        '--by[Shift by a duration\: 30m, 1h, 1d.]:by:'
+        '--title[New title.]:title:'
+        '--location[New location.]:location:'
+        '--notes[New notes.]:notes:'
+        '--calendar[Move to this calendar.]:calendar:'
+        '--availability[Free/busy marking\: busy | free | tentative | unavailable.]:availability:{__agenda_complete "${___availability[@]}"}'
+        '*--alert[Replace alerts\: 15m, 1h, 1d. Repeatable.]:alert:'
+        '--clear-alerts[Remove all alerts.]'
+        '--clear-repeat[Stop it repeating.]'
+        '--repeat[Repeat\: daily | weekly | monthly | yearly.]:repeat:{__agenda_complete "${___repeat[@]}"}'
+        '--every[Repeat every N periods, e.g. --every 2 with --repeat weekly.]:every:'
+        '--on[Weekdays, comma-separated\: MO,WE,FR.]:on:'
+        '--on-day[Days of the month\: 1,15 or '\''last'\''.]:on-day:'
+        '--nth[Which occurrence in the period\: first | second | third | fourth | last.]:nth:'
+        '--until[Stop repeating after this date (ISO 8601).]:until:'
+        '--times[Stop after this many occurrences.]:times:'
+        '--span[For repeating events\: this | future.]:span:{__agenda_complete "${___span[@]}"}'
+        '--occurrence[Which occurrence of a repeating event, e.g. 2026-08-10 or next friday.]:occurrence:'
+        '--dry-run[Print the change without saving.]'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_delete() {
+    local -i ret=1
+    local -ar ___span=('this' 'future')
+    local -ar arg_specs=(
+        ':id:'
+        '--remind[The id refers to a reminder.]'
+        '--span[For repeating events\: this | future.]:span:{__agenda_complete "${___span[@]}"}'
+        '--occurrence[Which occurrence of a repeating event, e.g. 2026-08-10 or next friday.]:occurrence:'
+        '--yes[Skip the confirmation prompt.]'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_calendars() {
+    local -i ret=1
+    local -ar arg_specs=(
+        '--reminders[List reminder lists instead of calendars.]'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_doctor() {
+    local -i ret=1
+    local -ar arg_specs=(
+        '--fix[Trigger the permission prompts for anything not yet granted.]'
+        '--json[Emit JSON instead of text.]'
+        '--timezone[Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.]:timezone:'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_describe() {
+    local -i ret=1
+    local -ar arg_specs=(
+        '--json[Force JSON output (the default, and the only form).]'
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_mcp() {
+    local -i ret=1
+    local -ar arg_specs=(
+        '--version[Show the version.]'
+        '(-h --help)'{-h,--help}'[Show help information.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+_agenda_help() {
+    local -i ret=1
+    local -ar arg_specs=(
+        '*:subcommands:'
+        '--version[Show the version.]'
+    )
+    _arguments -w -s -S : "${arg_specs[@]}" && ret=0
+
+    return "${ret}"
+}
+
+if [[ "${funcstack[1]}" = _agenda ]]; then
+    _agenda "${@}"
+else
+    compdef _agenda agenda
+fi
