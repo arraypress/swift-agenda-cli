@@ -111,12 +111,7 @@ public struct AgendaAlarm: Codable, Sendable, Equatable {
         // A zero offset has no direction — "at start before" reads as nonsense.
         guard minutes > 0 else { return "at start" }
 
-        let label: String
-        switch minutes {
-        case ..<60:    label = "\(minutes)m"
-        case ..<1_440: label = "\(minutes / 60)h"
-        default:       label = "\(minutes / 1_440)d"
-        }
+        let label = Formatting.offsetLabel(minutes: minutes)
         return relativeOffset < 0 ? "\(label) before" : "\(label) after"
     }
 }
