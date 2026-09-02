@@ -45,8 +45,10 @@ struct DescribeCommand: ParsableCommand {
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes, .prettyPrinted]
-        FileHandle.standardOutput.write(try encoder.encode(described))
-        FileHandle.standardOutput.write(Data("\n".utf8))
+        // SafeOutput, not FileHandle: a closed stdout raises an uncatchable
+        // exception and SIGPIPE kills the process at 141.
+        SafeOutput.write(try encoder.encode(described))
+        SafeOutput.write("\n")
     }
 
     // MARK: The tree
