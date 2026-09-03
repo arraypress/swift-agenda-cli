@@ -5,7 +5,7 @@
 ### `agenda` — Apple Calendar and Reminders
 
 Reads and edits the real local Calendar and Reminders stores. Installed at
-`~/.local/bin/agenda`; source in `Swift/Libraries/swift-agenda`.
+`~/.local/bin/agenda`; source in `Swift/Libraries/swift-agenda-cli`.
 
 Use it whenever a task touches the user's schedule or to-dos — checking availability,
 adding an event, finding something already booked, ticking off a reminder. The data is

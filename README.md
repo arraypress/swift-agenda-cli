@@ -43,7 +43,7 @@ brew install arraypress/tap/agenda
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/arraypress/swift-agenda.git", from: "1.0.0")
+    .package(url: "https://github.com/arraypress/swift-agenda-cli.git", from: "1.0.0")
 ]
 ```
 
