@@ -99,9 +99,10 @@ REPORTED="$("$STAGE/$TOOL" --version)"
 
 # Exercises the resource bundle, which --version and --help never reach. This
 # is the check that catches a tarball missing its resources.
-# agenda reads only from the network, so there is no offline conversion to
-# smoke-test. --describe still exercises the full command tree, which is the
-# closest offline equivalent.
+# agenda reads EventKit, not files, so there is no offline conversion to
+# smoke-test — and a real query would need the calendar permission this
+# runner does not have. `describe --json` still walks the full command tree,
+# which is the closest thing that runs anywhere.
 "$STAGE/$TOOL" describe --json >/dev/null
 
 # ── Extras ───────────────────────────────────────────────────────────────────

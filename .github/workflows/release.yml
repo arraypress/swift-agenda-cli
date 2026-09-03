@@ -1,0 +1,79 @@
+name: Release
+
+# Cutting a release is a tag push. The binary is built on Apple silicon runners
+# and attached to the GitHub release; the Homebrew formula points at that asset
+# rather than building from source, which would make every `brew install`
+# compile the whole dependency graph.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, without the leading v"
+        required: true
+
+jobs:
+  release:
+    # Apple silicon runner — these tools are arm64 only.
+    # macos-26, not macos-15: the older image selects Xcode 16 / Swift 6.1,
+    # which is behind this family. macos-26 defaults to Xcode 26.6.
+    runs-on: macos-26
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # AgendaKit is Foundation + EventKit and the suite touches neither the
+      # event store nor the permission system, so the whole thing runs on a
+      # headless runner with no calendar of its own.
+      - name: Test
+        run: swift test
+
+      - name: Build release binary
+        run: |
+          chmod +x Scripts/build-release.sh
+          Scripts/build-release.sh "${{ steps.version.outputs.value }}"
+
+      - name: Record checksum
+        id: checksum
+        run: |
+          ARCHIVE="dist/agenda-${{ steps.version.outputs.value }}-macos-arm64.tar.gz"
+          echo "sha256=$(shasum -a 256 "$ARCHIVE" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Stated rather than inferred. On a tag push the action can read the
+          # tag off github.ref, but on workflow_dispatch that ref is the branch
+          # and the action stops with "GitHub Releases requires a tag". Naming
+          # it from the resolved version makes both entry points behave the
+          # same, and round-trips: v1.2.3 -> 1.2.3 -> v1.2.3.
+          tag_name: v${{ steps.version.outputs.value }}
+          files: ${{ steps.checksum.outputs.archive }}
+          generate_release_notes: true
+          body: |
+            Install:
+
+            ```sh
+            brew install arraypress/tap/agenda
+            ```
+
+            `sha256` for the Homebrew formula:
+
+            ```
+            ${{ steps.checksum.outputs.sha256 }}
+            ```
