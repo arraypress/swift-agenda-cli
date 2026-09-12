@@ -9,6 +9,7 @@
 
 import AgendaKit
 import ArgumentParser
+import CLIKit
 import EventKit
 import Foundation
 
@@ -17,7 +18,7 @@ import Foundation
 /// These exist because `--next 24h` is not the same question: it runs from *now* into
 /// tomorrow morning, so it both hides what already happened today and pads the answer
 /// with events that are not today's.
-struct TodayCommand: AsyncParsableCommand {
+struct TodayCommand: AgendaVerb {
 
     static let configuration = CommandConfiguration(
         commandName: "today",
@@ -44,10 +45,11 @@ struct TodayCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Restrict to a calendar or list. Repeatable.")
     var calendar: [String] = []
 
-    @OptionGroup var output: OutputOptions
+    @OptionGroup var zone: ZoneOptions
+    @OptionGroup var common: CommonOptions
 
-    func run() async throws {
-        try output.apply()
+    func execute() async throws {
+        try zone.apply()
         try await runDay(offset: dayOffset)
     }
 
@@ -60,56 +62,51 @@ struct TodayCommand: AsyncParsableCommand {
         let start = Agenda.calendar.startOfDay(for: day)
         let end = Agenda.calendar.date(byAdding: .day, value: 1, to: start) ?? start
 
-        var lines: [String] = []
+        let hits = try await contents(start: start, end: end, offset: offset,
+                                      wantEvents: wantEvents, wantReminders: wantReminders)
+        let label = Output.day.string(from: start)
 
-        if wantEvents {
-            try await Agenda.requestAccess(to: .event)
-            let found = try Agenda.events(from: start, to: end, calendars: calendar)
-            lines += found.map(Output.line)
-        }
-
-        if wantReminders {
-            try await Agenda.requestAccess(to: .reminder)
-            // Overdue items surface on today's list too — a task that slipped is part
-            // of today's work whether or not its due date says so.
-            let filter = ReminderFilter(lists: calendar)
-            let due = try await Agenda.reminders(matching: filter).filter { reminder in
-                guard let dueAt = reminder.dueAt else { return false }
-                return dueAt < end && (offset == 0 ? true : dueAt >= start)
-            }
-            lines += due.map(Output.line)
-        }
-
-        guard output.format == .text else {
-            // JSON keeps the two kinds distinguishable rather than flattening to text.
-            let hits = try await searchResults(start: start, end: end,
-                                               wantEvents: wantEvents, wantReminders: wantReminders)
-            print(try Output.encode(hits))
+        guard !hits.isEmpty else {
+            // "Nothing on Monday" is an answer, so text says it and exits 0; every other
+            // format gets the empty array a parser expects.
+            if common.format == .text { sayNothing("Nothing on \(label).", options: common) }
+            else { try common.emitter.emitAll([SearchPayload]()) }
             return
         }
-
-        let label = Output.day.string(from: start)
-        print(lines.isEmpty ? "Nothing on \(label)." : "\(label)\n" + lines.joined(separator: "\n"))
+        if common.format == .text { Terminal.writeLine(label) }
+        try common.emitter.emitAll(hits.map(SearchPayload.init))
     }
 
-    /// The same day's contents as typed results, for `--json`.
-    private func searchResults(start: Date, end: Date,
-                               wantEvents: Bool, wantReminders: Bool) async throws -> [SearchResult] {
+    /// Everything on the day, as typed results.
+    ///
+    /// ONE SOURCE OF TRUTH FOR BOTH FORMATS. This used to be two: the text path filtered
+    /// reminders to the day with a lower bound, and the JSON path did not — so
+    /// `agenda tomorrow --json` returned every overdue reminder from the past as well.
+    private func contents(start: Date, end: Date, offset: Int,
+                          wantEvents: Bool, wantReminders: Bool) async throws -> [SearchResult] {
         var hits: [SearchResult] = []
         if wantEvents {
+            try await Agenda.requestAccess(to: .event)
             hits += try Agenda.events(from: start, to: end, calendars: calendar).map(SearchResult.event)
         }
         if wantReminders {
+            try await Agenda.requestAccess(to: .reminder)
+            // Overdue items surface on TODAY's list — a task that slipped is part of today's
+            // work whether or not its due date says so. On any other day they do not, because
+            // last week's slippage is not tomorrow's plan.
             hits += try await Agenda.reminders(matching: ReminderFilter(lists: calendar))
-                .filter { ($0.dueAt.map { $0 < end }) ?? false }
+                .filter { reminder in
+                    guard let dueAt = reminder.dueAt else { return false }
+                    return dueAt < end && (offset == 0 || dueAt >= start)
+                }
                 .map(SearchResult.reminder)
         }
         return hits
     }
 }
 
-/// `agenda tomorrow` — the same view, shifted a day.
-struct TomorrowCommand: AsyncParsableCommand {
+/// `agenda tomorrow` — the same day's worth, one day along.
+struct TomorrowCommand: AgendaVerb {
 
     static let configuration = CommandConfiguration(
         commandName: "tomorrow",
@@ -125,15 +122,17 @@ struct TomorrowCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Restrict to a calendar or list. Repeatable.")
     var calendar: [String] = []
 
-    @OptionGroup var output: OutputOptions
+    @OptionGroup var zone: ZoneOptions
+    @OptionGroup var common: CommonOptions
 
-    func run() async throws {
-        try output.apply()
+    func execute() async throws {
+        try zone.apply()
         var day = TodayCommand()
         day.events = events
         day.reminders = reminders
         day.calendar = calendar
-        day.output = output
+        day.zone = zone
+        day.common = common
         try await day.runDay(offset: 1)
     }
 }

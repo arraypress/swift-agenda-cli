@@ -8,10 +8,19 @@
 //
 
 import ArgumentParser
+import CLIKit
 import Foundation
 
-@main
-struct AgendaCommand: AsyncParsableCommand {
+struct AgendaCommand: AsyncParsableCommand, ServiceProviding {
+
+    /// Local, and nothing to authenticate against. The gates are macOS privacy permissions,
+    /// which are not credentials and cannot be stored.
+    static let service = ServiceSpec(
+        id: "agenda",
+        displayName: "Calendar and Reminders",
+        toolName: "agenda",
+        credentials: []
+    )
 
     static let configuration = CommandConfiguration(
         commandName: "agenda",
@@ -39,9 +48,19 @@ struct AgendaCommand: AsyncParsableCommand {
             DeleteCommand.self,
             CalendarsCommand.self,
             DoctorCommand.self,
-            DescribeCommand.self,
-            MCPCommand.self
+            DescribeCommand<AgendaCommand>.self,
+            MCPCommand<AgendaCommand>.self
         ],
         defaultSubcommand: EventsCommand.self
     )
+}
+
+// MARK: - Entry Point
+
+/// `CLIRunner` rather than `@main` on the command itself, so the exit codes are the family's:
+/// ArgumentParser's 64 becomes the documented 2, and a thrown `CLIError` maps to its own code
+/// instead of a bare 1.
+@main
+enum Main {
+    static func main() async { await CLIRunner.run(AgendaCommand.self) }
 }

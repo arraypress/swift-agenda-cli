@@ -9,10 +9,13 @@
 
 import AgendaKit
 import ArgumentParser
+import CLIKit
 import EventKit
 import Foundation
 
-struct EditCommand: AsyncParsableCommand {
+struct EditCommand: AgendaVerb, MutatingCommand {
+
+    static let actionName = "edit"
 
     static let configuration = CommandConfiguration(
         commandName: "edit",
@@ -65,12 +68,65 @@ struct EditCommand: AsyncParsableCommand {
 
     @OptionGroup var repeats: RecurrenceOptions
 
-    @OptionGroup var output: OutputOptions
+    @OptionGroup var zone: ZoneOptions
+    @OptionGroup var common: CommonOptions
+    @OptionGroup var write: WriteOptions
 
-    func run() async throws {
-        try output.apply()
+    func plan() async throws -> [Change] {
+        try zone.apply()
         try await Agenda.requestAccess(to: .reminder)
 
+        let before = try await current()
+        let changes = try edits()
+        guard !changes.isEmpty else {
+            throw CLIError.usage("Nothing to change. See `agenda edit --help` for the available fields.")
+        }
+
+        // One change per field, so a receipt can be checked against the reminder afterwards
+        // rather than read as a sentence.
+        var planned: [Change] = []
+        func field(_ name: String, _ was: String, _ now: String) {
+            planned.append(Change(.updated, subject: "\(id)#\(name)", from: was, to: now,
+                                  detail: ["field": name, "reminder": before.title]))
+        }
+        if let title = changes.title { field("title", before.title, title) }
+        if let notes = changes.notes { field("notes", before.notes ?? "—", notes) }
+        if let list = changes.list { field("list", before.list, list) }
+        if let priority = changes.priority {
+            field("priority", before.priorityLabel ?? "none", priority == 0 ? "none" : String(priority))
+        }
+        if let due = changes.dueAt {
+            let was = before.dueAt.map { (before.isDueAllDay ? Output.day : Output.stamp).string(from: $0) } ?? "none"
+            field("due", was, due.map { Output.stamp.string(from: $0) } ?? "none")
+        }
+        if let recurrence = changes.recurrence {
+            field("repeat", before.recurrence?.summary ?? "does not repeat",
+                  recurrence?.summary ?? "does not repeat")
+        }
+        if let alarms = changes.alarms {
+            field("alerts",
+                  before.alarms.isEmpty ? "none" : before.alarms.map(\.summary).joined(separator: ", "),
+                  alarms.isEmpty ? "none" : alarms.map(\.summary).joined(separator: ", "))
+        }
+        return planned
+    }
+
+    func apply(_ plan: [Change]) async throws -> [Change] {
+        do { _ = try Agenda.updateReminder(id: id, with: try edits()) }
+        catch let error as CLIError { throw error }
+        catch { throw Self.translate(error) }
+        return plan
+    }
+
+    /// The reminder as it stands, since there is no single-reminder fetch.
+    private func current() async throws -> AgendaReminder {
+        let all = try await Agenda.reminders(matching: ReminderFilter(includeCompleted: true))
+        guard let match = all.first(where: { $0.id == id }) else { throw AgendaError.notFound(id) }
+        return match
+    }
+
+    /// The edits these flags describe.
+    private func edits() throws -> ReminderChanges {
         var changes = ReminderChanges(title: title, notes: notes,
                                       priority: priority, list: list)
 
@@ -94,15 +150,6 @@ struct EditCommand: AsyncParsableCommand {
             changes.alarms = try AlertParsing.alarms(from: alert)
         }
 
-        guard !changes.isEmpty else {
-            print("Nothing to change. See `agenda edit --help` for the available fields.")
-            return
-        }
-
-        let updated = try Agenda.updateReminder(id: id, with: changes)
-        switch output.format {
-        case .json: print(try Output.encode(updated))
-        case .text: print(Output.line(updated))
-        }
+        return changes
     }
 }

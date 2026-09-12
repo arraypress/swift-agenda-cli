@@ -22,34 +22,13 @@ enum OutputFormat: String, ExpressibleByArgument, CaseIterable {
 }
 
 /// Flags shared by every command.
-struct OutputOptions: ParsableArguments {
-
-    @Flag(name: .long, help: "Emit JSON instead of text.")
-    var json = false
-
-    @Option(name: .long, help: "Compute dates in this zone, e.g. Asia/Tokyo. Defaults to the system zone.")
-    var timezone: String?
-
-    var format: OutputFormat { json ? .json : .text }
-
-    /// Applies `--timezone` to the package and the output formatters.
-    ///
-    /// Must run before any date is parsed or rendered — `Agenda.calendar` decides what
-    /// a bare `2026-07-19` means, so setting it afterwards would leave the parse in one
-    /// zone and the display in another.
-    func apply() throws {
-        guard let timezone else { return }
-        guard let zone = TimeZone(identifier: timezone) else {
-            throw ValidationError("Unknown time zone \"\(timezone)\". Use an IANA name like Europe/London.")
-        }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = zone
-        Agenda.calendar = calendar
-        Output.applyTimeZone(zone)
-    }
-}
-
 enum Output {
+
+    // THE FORMATTERS ARE SHARED AND MUTABLE, and Swift 6 is right to ask about that. They
+    // are safe here for a reason that is about this program rather than about the type: one
+    // command runs per process, on one thread, and `--timezone` retargets them once before
+    // anything is parsed or rendered. Making them instance state would thread a formatter
+    // through every line function to buy nothing.
 
     /// Retargets every formatter at `zone`, so `--timezone` shows the remote wall
     /// clock rather than translating it back to the machine's.
@@ -61,7 +40,7 @@ enum Output {
     }
 
     /// ISO 8601 with local offset — unambiguous to parse, still readable.
-    static let iso: ISO8601DateFormatter = {
+    nonisolated(unsafe) static let iso: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         formatter.timeZone = .current
@@ -69,7 +48,7 @@ enum Output {
     }()
 
     /// Short local time, e.g. "2:30 PM".
-    static let clock: DateFormatter = {
+    nonisolated(unsafe) static let clock: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         formatter.dateStyle = .none
@@ -77,35 +56,14 @@ enum Output {
     }()
 
     /// Short local date and time.
-    static let stamp: DateFormatter = {
+    nonisolated(unsafe) static let stamp: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         formatter.dateStyle = .medium
         return formatter
     }()
 
-    static func encode<T: Encodable>(_ value: T) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(value)
-        return String(decoding: data, as: UTF8.self)
-    }
 
-    /// Prints `values` in `format`, or `empty` when there are none.
-    ///
-    /// The empty case prints to stdout and exits zero — "you have nothing on" is a
-    /// successful answer, not a failure. Permission problems throw long before here.
-    static func render<T: Encodable>(_ values: [T], format: OutputFormat,
-                                     empty: String, line: (T) -> String) throws {
-        switch format {
-        case .json:
-            print(try encode(values))
-        case .text:
-            guard !values.isEmpty else { print(empty); return }
-            print(values.map(line).joined(separator: "\n"))
-        }
-    }
 
     // MARK: - Line formats
 
@@ -128,7 +86,7 @@ enum Output {
     }
 
     /// Date only, no time — for all-day items, where a time would be invented.
-    static let day: DateFormatter = {
+    nonisolated(unsafe) static let day: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none

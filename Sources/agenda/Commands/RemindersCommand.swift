@@ -9,10 +9,11 @@
 
 import AgendaKit
 import ArgumentParser
+import CLIKit
 import EventKit
 import Foundation
 
-struct RemindersCommand: AsyncParsableCommand {
+struct RemindersCommand: AgendaVerb {
 
     static let configuration = CommandConfiguration(
         commandName: "reminders",
@@ -38,10 +39,11 @@ struct RemindersCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Maximum rows to return.")
     var limit: Int?
 
-    @OptionGroup var output: OutputOptions
+    @OptionGroup var zone: ZoneOptions
+    @OptionGroup var common: CommonOptions
 
-    func run() async throws {
-        try output.apply()
+    func execute() async throws {
+        try zone.apply()
         try await Agenda.requestAccess(to: .reminder)
 
         var filter = ReminderFilter()
@@ -52,7 +54,6 @@ struct RemindersCommand: AsyncParsableCommand {
         filter.limit = limit
 
         let reminders = try await Agenda.reminders(matching: filter)
-        try Output.render(reminders, format: output.format,
-                          empty: overdue ? "Nothing overdue." : "No reminders.", line: Output.line)
+        try emit(reminders.map(ReminderPayload.init), empty: overdue ? "Nothing overdue." : "No reminders.", options: common)
     }
 }

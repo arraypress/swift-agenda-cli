@@ -220,3 +220,52 @@ library target stays dependency-free.
 ## License
 
 MIT
+
+
+## On CLIKit
+
+`agenda` used to carry a private copy of it: `SafeOutput` reimplemented `Terminal`,
+`OutputOptions` reimplemented `CommonOptions`, `Output.render` the emitter, and there were
+hand-written `describe` and `mcp` commands beside the generic ones. Each was a defensible call
+alone — the comment on `SafeOutput` said "not worth a dependency for fifteen lines" — and
+together they had become the whole surface, answering to fewer formats than any other tool in
+the family.
+
+It now answers to all of them: `--json`, `--text`, `--csv`, `--markdown`, `--ndjson`,
+`--fields`, `--quiet`, the documented exit codes, `agenda describe` and `agenda mcp`.
+
+`AgendaKit` stays on Swift 5 language mode. `EKEventStore` is legitimately one shared object
+and the library is single-threaded by design; rewriting its concurrency model is a different
+job from putting the CLI on CLIKit. The CLI target above it is Swift 6.
+
+### What it cannot see
+
+**EventKit does not expose every calendar Calendar.app shows.** On a real machine Calendar.app
+listed eight and `EKEventStore` returned six — the missing two were *Siri Suggestions* and
+*Scheduled Reminders*, which macOS fills in from Mail. A flight from a booking confirmation
+sits there until you accept it.
+
+Measured, not inferred: `store.events(matching:)` across a window containing a suggested
+flight, with **no calendar filter**, returns zero events. It is not a filter this tool could
+lift.
+
+That failure is silent and it is the worst shape a failure takes — `agenda today` answering
+"Nothing scheduled" over the top of a flight leaving in an hour. So an **empty** answer now
+checks whether Calendar.app holds calendars EventKit does not, and says so; `agenda doctor`
+reports the gap as a standing note. Asking Calendar.app needs Automation permission, and a
+refusal is silent: the warning is a courtesy on an empty result, not a second permission prompt
+for everyone who never had a suggested event.
+
+### The write envelope
+
+`add`, `move`, `edit` and `delete` take `--dry-run` and `--receipt <path>` through CLIKit's
+`MutatingCommand`. Two of them had already grown their own: `add` printed "Would create
+event: …" as prose, and `move` had a `diff` producing a block of before/after lines. Both are
+now structured changes, one per field, that a caller can check against what actually happened.
+
+`done` deliberately has neither — `--undo` reverses it exactly, so there is nothing to plan.
+
+**There is no Recently Deleted for a calendar.** `agenda delete --span future` removes every
+remaining occurrence of a series and nothing puts it back, which is why `--dry-run` is worth
+running first and why the confirmation prompt stays alongside it: one answers "what would this
+do", the other "are you sure".

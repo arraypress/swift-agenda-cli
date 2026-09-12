@@ -9,10 +9,11 @@
 
 import AgendaKit
 import ArgumentParser
+import CLIKit
 import EventKit
 import Foundation
 
-struct EventsCommand: AsyncParsableCommand {
+struct EventsCommand: AgendaVerb {
 
     static let configuration = CommandConfiguration(
         commandName: "events",
@@ -39,17 +40,17 @@ struct EventsCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Only events that overlap another event.")
     var conflicts = false
 
-    @OptionGroup var output: OutputOptions
+    @OptionGroup var zone: ZoneOptions
+    @OptionGroup var common: CommonOptions
 
-    func run() async throws {
-        try output.apply()
+    func execute() async throws {
+        try zone.apply()
         try await Agenda.requestAccess(to: .event)
 
         if conflicts {
             let pairs = try Agenda.conflicts(calendars: calendar)
             let flattened = pairs.flatMap { [$0.0, $0.1] }
-            try Output.render(flattened, format: output.format,
-                              empty: "No conflicts today.", line: Output.line)
+            try emit(flattened.map(EventPayload.init), empty: "No conflicts today.", options: common)
             return
         }
 
@@ -62,7 +63,6 @@ struct EventsCommand: AsyncParsableCommand {
         }
 
         let events = try Agenda.events(from: start, to: end, calendars: calendar)
-        try Output.render(events, format: output.format,
-                          empty: "Nothing scheduled.", line: Output.line)
+        try emit(events.map(EventPayload.init), empty: "Nothing scheduled.", options: common)
     }
 }

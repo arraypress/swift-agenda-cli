@@ -9,10 +9,11 @@
 
 import AgendaKit
 import ArgumentParser
+import CLIKit
 import EventKit
 import Foundation
 
-struct SearchCommand: AsyncParsableCommand {
+struct SearchCommand: AgendaVerb {
 
     static let configuration = CommandConfiguration(
         commandName: "search",
@@ -46,10 +47,11 @@ struct SearchCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Restrict to a calendar or list. Repeatable.")
     var calendar: [String] = []
 
-    @OptionGroup var output: OutputOptions
+    @OptionGroup var zone: ZoneOptions
+    @OptionGroup var common: CommonOptions
 
-    func run() async throws {
-        try output.apply()
+    func execute() async throws {
+        try zone.apply()
 
         // Neither flag means both, which is the useful default — "find my flight"
         // should not care which app the user happened to put it in.
@@ -68,7 +70,6 @@ struct SearchCommand: AsyncParsableCommand {
             calendars: calendar
         )
 
-        try Output.render(hits, format: output.format,
-                          empty: "Nothing matching \"\(query)\".", line: Output.line)
+        try emit(hits.map(SearchPayload.init), empty: "Nothing matching \"\(query)\".", options: common)
     }
 }

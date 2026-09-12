@@ -9,10 +9,11 @@
 
 import AgendaKit
 import ArgumentParser
+import CLIKit
 import EventKit
 import Foundation
 
-struct DoneCommand: AsyncParsableCommand {
+struct DoneCommand: AgendaVerb {
 
     static let configuration = CommandConfiguration(
         commandName: "done",
@@ -26,16 +27,20 @@ struct DoneCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Reopen the reminder instead of completing it.")
     var undo = false
 
-    @OptionGroup var output: OutputOptions
+    @OptionGroup var zone: ZoneOptions
+    @OptionGroup var common: CommonOptions
 
-    func run() async throws {
-        try output.apply()
+    // NO ENVELOPE, and that is the judgement rather than an omission: `--undo` reverses
+    // this exactly, so there is nothing to plan and nothing to record that the reminder
+    // itself does not already say.
+    func execute() async throws {
+        try zone.apply()
         try await Agenda.requestAccess(to: .reminder)
-        let updated = try Agenda.completeReminder(id: id, completed: !undo)
-
-        switch output.format {
-        case .json: print(try Output.encode(updated))
-        case .text: print(Output.line(updated))
+        do {
+            let updated = try Agenda.completeReminder(id: id, completed: !undo)
+            try common.emitter.emit(ReminderPayload(updated))
+        } catch {
+            throw Self.translate(error)
         }
     }
 }

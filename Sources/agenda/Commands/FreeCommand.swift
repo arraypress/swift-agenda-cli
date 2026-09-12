@@ -9,10 +9,11 @@
 
 import AgendaKit
 import ArgumentParser
+import CLIKit
 import EventKit
 import Foundation
 
-struct FreeCommand: AsyncParsableCommand {
+struct FreeCommand: AgendaVerb {
 
     static let configuration = CommandConfiguration(
         commandName: "free",
@@ -44,10 +45,11 @@ struct FreeCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Restrict to a calendar by title or id. Repeatable.")
     var calendar: [String] = []
 
-    @OptionGroup var output: OutputOptions
+    @OptionGroup var zone: ZoneOptions
+    @OptionGroup var common: CommonOptions
 
-    func run() async throws {
-        try output.apply()
+    func execute() async throws {
+        try zone.apply()
         try await Agenda.requestAccess(to: .event)
 
         let minimum = try Agenda.duration(length)
@@ -62,8 +64,6 @@ struct FreeCommand: AsyncParsableCommand {
         )
         if first { slots = Array(slots.prefix(1)) }
 
-        try Output.render(slots, format: output.format,
-                          empty: "No free \(length) window in the next \(within).",
-                          line: Output.line)
+        try emit(slots.map(SlotPayload.init), empty: "No free \(length) window in the next \(within).", options: common)
     }
 }

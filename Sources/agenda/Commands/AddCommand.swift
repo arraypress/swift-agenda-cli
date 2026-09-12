@@ -9,10 +9,13 @@
 
 import AgendaKit
 import ArgumentParser
+import CLIKit
 import EventKit
 import Foundation
 
-struct AddCommand: AsyncParsableCommand {
+struct AddCommand: AgendaVerb, MutatingCommand {
+
+    static let actionName = "add"
 
     static let configuration = CommandConfiguration(
         commandName: "add",
@@ -66,42 +69,68 @@ struct AddCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Priority for reminders, 1 (highest) to 9.")
     var priority: Int = 0
 
-    @Flag(name: .long, help: "Print what would be created without saving.")
-    var dryRun = false
-
     @OptionGroup var repeats: RecurrenceOptions
 
-    @OptionGroup var output: OutputOptions
+    @OptionGroup var zone: ZoneOptions
+    @OptionGroup var common: CommonOptions
+    @OptionGroup var write: WriteOptions
 
-    func run() async throws {
-        try output.apply()
+    // ON THE ENVELOPE, and not for safety — this creates something, so nothing existing is
+    // at risk. It is here because it had ALREADY grown a --dry-run of its own that printed
+    // "Would create event: …" as prose, and a printResult that reimplemented the emitter.
+    // That is the envelope, hand-written, in one file. Now it is the shared one, and
+    // --dry-run answers in the same shape every other tool does.
+
+    func plan() async throws -> [Change] {
+        try zone.apply()
         let start = try at.map(Agenda.date) ?? Date()
         let recurrence = try repeats.resolve()
         let alarms = try AlertParsing.alarms(from: alert) + alertAt.map(AlertParsing.locationAlarm)
 
+        var detail = ["title": title]
+        if let recurrence { detail["repeats"] = recurrence.summary }
+        if !alarms.isEmpty { detail["alerts"] = alarms.map(\.summary).joined(separator: " + ") }
+
         if remind {
             try await Agenda.requestAccess(to: .reminder)
-            let draft = ReminderDraft(
-                title: title,
-                dueAt: at == nil ? nil : start,
-                notes: notes,
-                dueHasTime: !allDay,
-                priority: priority,
-                recurrence: recurrence,
-                alarms: alarms,
-                list: calendar
-            )
-            guard !dryRun else {
-                print("Would create reminder: \(draft.title)"
-                      + (draft.dueAt.map { " due \(Output.stamp.string(from: $0))" } ?? "")
-                      + (recurrence.map { ", \($0.summary)" } ?? "")
-                      + (draft.list.map { " in [\($0)]" } ?? ""))
-                return
+            detail["kind"] = "reminder"
+            if at != nil { detail["due"] = Output.stamp.string(from: start) }
+            return [Change(.created, subject: title, to: calendar ?? "the default list",
+                           detail: detail)]
+        }
+        try await Agenda.requestAccess(to: .event)
+        let end = allDay ? start : start.addingTimeInterval(try Agenda.duration(length))
+        detail["kind"] = "event"
+        detail["when"] = allDay
+            ? "\(Output.day.string(from: start)) all day"
+            : "\(Output.stamp.string(from: start))–\(Output.clock.string(from: end))"
+        return [Change(.created, subject: title, to: calendar ?? "the default calendar",
+                       detail: detail)]
+    }
+
+    func apply(_ plan: [Change]) async throws -> [Change] {
+        let start = try at.map(Agenda.date) ?? Date()
+        let recurrence = try repeats.resolve()
+        let alarms = try AlertParsing.alarms(from: alert) + alertAt.map(AlertParsing.locationAlarm)
+        let detail = plan.first?.detail ?? [:]
+
+        do {
+            if remind {
+                let draft = ReminderDraft(
+                    title: title,
+                    dueAt: at == nil ? nil : start,
+                    notes: notes,
+                    dueHasTime: !allDay,
+                    priority: priority,
+                    recurrence: recurrence,
+                    alarms: alarms,
+                    list: calendar
+                )
+                let created = try Agenda.createReminder(draft)
+                // The new id is the thing worth having afterwards — every other verb takes
+                // one — so it becomes the subject and the title moves into the detail.
+                return [Change(.created, subject: created.id, to: created.list, detail: detail)]
             }
-            let created = try Agenda.createReminder(draft)
-            try printResult(created, line: Output.line)
-        } else {
-            try await Agenda.requestAccess(to: .event)
             let end = allDay ? start : start.addingTimeInterval(try Agenda.duration(length))
             let draft = EventDraft(
                 title: title, startsAt: start, endsAt: end, isAllDay: allDay,
@@ -109,23 +138,10 @@ struct AddCommand: AsyncParsableCommand {
                 recurrence: recurrence, alarms: alarms,
                 availability: availability, calendar: calendar
             )
-            guard !dryRun else {
-                print("Would create event: \(draft.title) "
-                      + "\(Output.stamp.string(from: draft.startsAt))–\(Output.clock.string(from: draft.endsAt))"
-                      + (recurrence.map { ", \($0.summary)" } ?? "")
-                      + (alarms.isEmpty ? "" : ", alerts \(alarms.map(\.summary).joined(separator: " + "))")
-                      + (draft.calendar.map { " in [\($0)]" } ?? ""))
-                return
-            }
             let created = try Agenda.createEvent(draft)
-            try printResult(created, line: Output.line)
-        }
-    }
-
-    private func printResult<T: Encodable>(_ value: T, line: (T) -> String) throws {
-        switch output.format {
-        case .json: print(try Output.encode(value))
-        case .text: print(line(value))
+            return [Change(.created, subject: created.id, to: created.calendar, detail: detail)]
+        } catch {
+            throw Self.translate(error)
         }
     }
 }
