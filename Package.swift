@@ -12,34 +12,19 @@ let package = Package(
         .macOS("15.0")
     ],
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
-        .library(
-            name: "AgendaKit",
-            targets: ["AgendaKit"]),
-        .executable(
-            name: "agenda",
-            targets: ["agenda"]),
+        .executable(name: "agenda", targets: ["agenda"]),
     ],
     dependencies: [
-        // Only the CLI target takes these on — `AgendaKit` stays Foundation + EventKit.
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         .package(path: "../swift-cli-kit"),
+        .package(path: "../swift-agenda-kit"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
-        .target(
-            name: "AgendaKit",
-            path: "Sources/AgendaKit",
-            // Swift 5 language mode on purpose. EventKit is not Sendable and `EKEventStore`
-            // is legitimately one shared object for the process — this library is
-            // single-threaded by design, and rewriting its concurrency model is a different
-            // job from putting the CLI on CLIKit. The CLI target above it IS on Swift 6.
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
         .executableTarget(
             name: "agenda",
             dependencies: [
-                "AgendaKit",
+                .product(name: "AgendaKit", package: "swift-agenda-kit"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "CLIKit", package: "swift-cli-kit"),
             ],
@@ -58,20 +43,12 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "AgendaKitTests",
-            dependencies: ["AgendaKit"],
-            path: "Tests",
-            // Swift 5 mode, for the same reason as the library it tests.
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
-        .testTarget(
             name: "AgendaCLITests",
             dependencies: [
                 "agenda",
-                "AgendaKit",
+                .product(name: "AgendaKit", package: "swift-agenda-kit"),
                 .product(name: "CLIKit", package: "swift-cli-kit"),
             ],
-            path: "TestsCLI"
         ),
     ]
 )

@@ -222,6 +222,12 @@ library target stays dependency-free.
 MIT
 
 
+## The library
+
+`AgendaKit` lives in [`swift-agenda-kit`](../swift-agenda-kit) — it used to be a target in
+this repo, which made this the only pair in the fleet sharing one. Everything that talks to
+EventKit is there; this is the command line over it.
+
 ## On CLIKit
 
 `agenda` used to carry a private copy of it: `SafeOutput` reimplemented `Terminal`,
