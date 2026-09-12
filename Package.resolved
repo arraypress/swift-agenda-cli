@@ -1,5 +1,15 @@
 {
+  "originHash" : "09db4b9bfa3a94ae9820fe8cc4fee54ae3db45da6ab26a9e98d1cbafeb1f0f25",
   "pins" : [
+    {
+      "identity" : "swift-agenda-kit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arraypress/swift-agenda-kit.git",
+      "state" : {
+        "revision" : "e73bce0789d5576a670b86454e1852be4b7ff18a",
+        "version" : "0.1.0"
+      }
+    },
     {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
@@ -8,7 +18,16 @@
         "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
         "version" : "1.8.2"
       }
+    },
+    {
+      "identity" : "swift-cli-kit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arraypress/swift-cli-kit.git",
+      "state" : {
+        "revision" : "b5746ffe0d3523281ca23204704ed2ec26e05413",
+        "version" : "0.4.0"
+      }
     }
   ],
-  "version" : 2
+  "version" : 3
 }

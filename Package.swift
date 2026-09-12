@@ -16,8 +16,8 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
-        .package(path: "../swift-cli-kit"),
-        .package(path: "../swift-agenda-kit"),
+        .package(url: "https://github.com/arraypress/swift-cli-kit.git", from: "0.4.0"),
+        .package(url: "https://github.com/arraypress/swift-agenda-kit.git", from: "0.1.0"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
