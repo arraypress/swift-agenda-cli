@@ -74,8 +74,19 @@ enum Output {
         } else {
             parts[0] = "\(stamp.string(from: event.startsAt))–\(clock.string(from: event.endsAt))  \(event.title)"
         }
-        if let location = event.location { parts.append("@ \(location)") }
-        if let url = event.meetingURL { parts.append(url) }
+        // A location that is nothing but the call link would print the same URL twice.
+        let link = event.videoCall?.url ?? event.meetingURL
+        if let location = event.location,
+           location.trimmingCharacters(in: .whitespacesAndNewlines) != link {
+            parts.append("@ \(location)")
+        }
+        // A recognised call names its service, so "Zoom" reads at a glance; any other link
+        // (the event's own URL field) still prints bare, as it always has.
+        if let call = event.videoCall {
+            parts.append("📹 \(call.service.displayName) \(call.url)")
+        } else if let url = event.meetingURL {
+            parts.append(url)
+        }
         if !event.attendees.isEmpty { parts.append("\(event.attendees.count) attending") }
         if !event.alarms.isEmpty { parts.append("⏰ \(event.alarms.map(\.summary).joined(separator: ", "))") }
         if event.availability != .busy { parts.append(event.availability.rawValue) }

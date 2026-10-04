@@ -107,3 +107,79 @@ struct CalendarPayload: Encodable, TableRenderable {
         return [calendar.title, calendar.source, flags.joined(separator: ", "), calendar.id]
     }
 }
+
+/// The call `agenda join` opened, or would open with `--print`.
+///
+/// The event's identifying fields and its `videoCall`, under the same names an event
+/// carries, plus `opened` — so a caller can tell a printed link from a launched one.
+struct JoinPayload: Encodable, TextRenderable {
+
+    let event: AgendaEvent
+    let call: VideoCall
+    let opened: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, calendar, startsAt, endsAt, videoCall, opened
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(event.id, forKey: .id)
+        try container.encode(event.title, forKey: .title)
+        try container.encode(event.calendar, forKey: .calendar)
+        try container.encode(event.startsAt, forKey: .startsAt)
+        try container.encode(event.endsAt, forKey: .endsAt)
+        try container.encode(call, forKey: .videoCall)
+        try container.encode(opened, forKey: .opened)
+    }
+
+    /// With `--print`, the bare link and nothing else, so `open "$(agenda join --print --text)"`
+    /// works. Otherwise what was opened, for the person who just watched a window appear.
+    func renderText() -> String {
+        guard opened else { return call.url }
+        let when = "\(Output.clock.string(from: event.startsAt))–\(Output.clock.string(from: event.endsAt))"
+        return "Joining \(call.service.displayName): \(event.title)  \(when)\n    \(call.url)"
+    }
+}
+
+/// The day or event `agenda open` showed, or would show with `--print`.
+///
+/// Exactly one of `url` and `script` is present: Calendar.app has no link for a date, so a
+/// day there is the AppleScript that drives it.
+struct OpenPayload: Encodable, TextRenderable {
+
+    let app: CalendarApp
+    let date: Date
+    let event: AgendaEvent?
+    let launch: Launch
+    let opened: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case app, id, title, date, url, script, opened
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(app, forKey: .app)
+        try container.encodeIfPresent(event?.id, forKey: .id)
+        try container.encodeIfPresent(event?.title, forKey: .title)
+        try container.encode(date, forKey: .date)
+        switch launch {
+        case .url(let url):       try container.encode(url.absoluteString, forKey: .url)
+        case .script(let script): try container.encode(script, forKey: .script)
+        }
+        try container.encode(opened, forKey: .opened)
+    }
+
+    /// With `--print`, the bare link — or the script, ready to pipe into `osascript`.
+    func renderText() -> String {
+        guard opened else {
+            switch launch {
+            case .url(let url):       return url.absoluteString
+            case .script(let script): return script
+            }
+        }
+        let subject = event.map { "\"\($0.title)\"" } ?? Output.day.string(from: date)
+        return "Opened \(subject) in \(app.displayName)."
+    }
+}
