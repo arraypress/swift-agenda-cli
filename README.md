@@ -207,9 +207,6 @@ One tool per subcommand — `agenda_events`, `agenda_today`, `agenda_tomorrow`,
 own definitions, so the tools cannot drift from the commands. Each call re-runs the binary
 and returns its JSON; failures come back as `isError` with the same envelope a shell sees.
 
-(The hand-rolled five-tool server in `Sources/agenda/MCP/` predates the CLIKit port and is no
-longer wired to `agenda mcp`.)
-
 ## Design notes
 
 **Permission errors are never empty results.** Every read throws `AgendaError.accessDenied` when the entity isn't authorized. An agent that gets back zero events will report "you have nothing scheduled" — which is a confident lie if the real problem was a missing grant.

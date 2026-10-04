@@ -101,3 +101,16 @@ final class HiddenCalendarTests: XCTestCase {
         }
     }
 }
+
+final class VersionTests: XCTestCase {
+
+    func testTheEmbeddedInfoPlistCarriesTheSameVersion() throws {
+        // The plist is linked into the binary for TCC, and it sat at 1.0.0 through
+        // three releases because nothing compared it with --version.
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/agenda/Info.plist")
+        let plist = try XCTUnwrap(NSDictionary(contentsOf: url))
+        XCTAssertEqual(plist["CFBundleShortVersionString"] as? String, AgendaCommand.configuration.version)
+    }
+}

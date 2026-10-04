@@ -7,7 +7,7 @@
     <key>CFBundleName</key>
     <string>agenda</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>1.1.1</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>agenda reads and edits your calendar events from the command line.</string>
     <key>NSRemindersFullAccessUsageDescription</key>
