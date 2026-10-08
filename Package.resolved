@@ -1,5 +1,5 @@
 {
-  "originHash" : "7855fe20aa17bf53ffdd81bf4b6de1bac26c5a87f17068c662ad0c6170652c62",
+  "originHash" : "fbf629e550be6ac1bb444aec3ac1914a78317da889b8f9b39a051116b1d236c6",
   "pins" : [
     {
       "identity" : "swift-agenda-kit",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/arraypress/swift-cli-kit.git",
       "state" : {
-        "revision" : "b5746ffe0d3523281ca23204704ed2ec26e05413",
-        "version" : "0.4.0"
+        "revision" : "10f78031e1f56cd0b6917d03e868b3a159b2b44e",
+        "version" : "0.7.1"
       }
     }
   ],
