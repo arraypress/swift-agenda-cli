@@ -83,7 +83,7 @@ struct DeleteCommand: AgendaVerb, MutatingCommand {
         // afterwards, both earn their place.
         let what = plan.first?.detail["title"] ?? id
         let scope = plan.first?.detail["scope"].map { " (\($0))" } ?? ""
-        guard confirm("Delete \"\(what)\"\(scope)?") else {
+        guard try Terminal.confirm("Delete \"\(what)\"\(scope)?", assumeYes: yes) else {
             // Declined is recorded rather than silent: a receipt should be able to say the
             // deletion was considered and turned down.
             return plan.map {
@@ -113,19 +113,6 @@ struct DeleteCommand: AgendaVerb, MutatingCommand {
         return match
     }
 
-    /// Prompts unless `--yes`. Answers other than y/yes abort.
-    ///
-    /// Reads from the terminal, so a non-interactive caller without `--yes` gets a
-    /// refusal rather than a hang on empty stdin.
-    private func confirm(_ question: String) -> Bool {
-        guard !yes else { return true }
-        print("\(question) [y/N] ", terminator: "")
-        guard let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased(),
-              answer == "y" || answer == "yes" else {
-            return false
-        }
-        return true
-    }
 }
 
 extension AgendaSpan: ExpressibleByArgument {}
