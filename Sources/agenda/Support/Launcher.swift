@@ -78,6 +78,6 @@ enum Launcher {
         process.waitUntilExit()
         let message = String(decoding: data, as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (process.terminationStatus, message.isEmpty ? nil : message)
+        return (process.terminationStatus, message.nilIfEmpty)
     }
 }
