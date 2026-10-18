@@ -15,6 +15,8 @@ import Foundation
 
 struct EventsCommand: AgendaVerb {
 
+    static let commandEffect = CommandEffect.readOnly
+
     static let configuration = CommandConfiguration(
         commandName: "events",
         abstract: "List calendar events.",

@@ -9,6 +9,7 @@
 
 import AgendaKit
 import ArgumentParser
+import CLIKit
 import Foundation
 
 /// How results are printed.
@@ -68,17 +69,20 @@ enum Output {
     // MARK: - Line formats
 
     static func line(_ event: AgendaEvent) -> String {
+        // Title and location may be someone else's words (an invitation, a shared
+        // calendar); `Untrusted.text` fences them when this run wraps.
+        let title = Untrusted.text(event.title)
         var parts = [""]
         if event.isAllDay {
-            parts[0] = "\(stamp.string(from: event.startsAt).prefix(12)) all day  \(event.title)"
+            parts[0] = "\(stamp.string(from: event.startsAt).prefix(12)) all day  \(title)"
         } else {
-            parts[0] = "\(stamp.string(from: event.startsAt))–\(clock.string(from: event.endsAt))  \(event.title)"
+            parts[0] = "\(stamp.string(from: event.startsAt))–\(clock.string(from: event.endsAt))  \(title)"
         }
         // A location that is nothing but the call link would print the same URL twice.
         let link = event.videoCall?.url ?? event.meetingURL
         if let location = event.location,
            location.trimmingCharacters(in: .whitespacesAndNewlines) != link {
-            parts.append("@ \(location)")
+            parts.append("@ \(Untrusted.text(location))")
         }
         // A recognised call names its service, so "Zoom" reads at a glance; any other link
         // (the event's own URL field) still prints bare, as it always has.
@@ -105,7 +109,7 @@ enum Output {
     }()
 
     static func line(_ reminder: AgendaReminder) -> String {
-        var parts = [reminder.isCompleted ? "[x]" : "[ ]", reminder.title]
+        var parts = [reminder.isCompleted ? "[x]" : "[ ]", Untrusted.text(reminder.title)]
         if let due = reminder.dueAt {
             // An all-day reminder has no time of day; rendering one shows "12:00 AM"
             // and reads as a midnight alert that was never set.

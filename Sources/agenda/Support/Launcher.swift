@@ -24,14 +24,17 @@ enum Launcher {
 
     /// Opens `url` with whatever app handles its scheme.
     ///
-    /// - Throws: ``CLIError`` (upstream) when nothing on this Mac handles the link.
+    /// - Throws: ``CLIError`` (upstream, retry `not_started`) when nothing on this Mac
+    ///   handles the link.
     static func open(_ url: URL, app: String) throws {
         let (status, message) = run("/usr/bin/open", [url.absoluteString])
         guard status == 0 else {
-            throw CLIError.upstream(
-                "Could not open \(url.scheme.map { "\($0):" } ?? "the") link: \(message ?? "open exited \(status)")",
+            throw CLIError(
+                code: .upstream,
+                message: "Could not open \(url.scheme.map { "\($0):" } ?? "the") link: \(message ?? "open exited \(status)")",
+                hint: "Is \(app) installed? Pass --print to get the link instead.",
                 service: "agenda",
-                hint: "Is \(app) installed? Pass --print to get the link instead."
+                retry: .notStarted
             )
         }
     }
@@ -43,41 +46,26 @@ enum Launcher {
         try open(url, app: app)
     }
 
-    /// Runs AppleScript source.
+    /// Runs AppleScript source through CLIKit's `OSAScript`.
     ///
-    /// - Throws: ``CLIError`` (auth) when Automation over the target app is refused, and
-    ///   (upstream) for any other failure.
-    static func run(script: String) throws {
-        let (status, message) = run("/usr/bin/osascript", ["-e", script])
-        guard status == 0 else {
-            // -1743 is errAEEventNotPermitted: the user has not allowed this process to
-            // drive Calendar. That is a grant, like the calendar permission itself.
-            if message?.contains("-1743") == true {
-                throw CLIError.authRequired(
-                    "Not allowed to control Calendar.",
-                    service: "agenda",
-                    hint: "System Settings ▸ Privacy & Security ▸ Automation"
-                )
-            }
-            throw CLIError.upstream("Calendar did not run the script: \(message ?? "osascript exited \(status)")",
-                                    service: "agenda")
-        }
+    /// - Throws: `OSAScriptError`, which leaves as exit 3 with the Automation hint when
+    ///   driving Calendar is refused (-1743), exit 5 for anything else — each with a retry
+    ///   verdict, and a timeout that kills a Calendar.app stuck behind a dialog.
+    static func run(script: String, timeout: Double? = nil) throws {
+        try OSAScript.run(script, timeout: timeout)
     }
 
     /// Runs `tool` and returns its exit status and trimmed stderr.
+    ///
+    /// Through `ChildProcess`, with a limit: `open` returns as soon as the link is handed
+    /// over, so fifteen seconds is a hang, not a slow app.
     private static func run(_ tool: String, _ arguments: [String]) -> (status: Int32, message: String?) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: tool)
-        process.arguments = arguments
-        let pipe = Pipe()
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = pipe
-        do { try process.run() } catch { return (-1, error.localizedDescription) }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        let message = String(decoding: data, as: UTF8.self)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (process.terminationStatus, message.nilIfEmpty)
+        do {
+            let output = try ChildProcess.runBlocking(tool, arguments, timeout: 15, stdout: .none)
+            if output.timedOut { return (-1, "\(tool) did not return within 15 s") }
+            return (output.status, output.stderrText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty)
+        } catch {
+            return (-1, error.reason)
+        }
     }
 }

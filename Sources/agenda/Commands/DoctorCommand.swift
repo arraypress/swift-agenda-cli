@@ -15,6 +15,8 @@ import Foundation
 
 struct DoctorCommand: AgendaVerb {
 
+    static let commandEffect = CommandEffect.readOnly
+
     static let configuration = CommandConfiguration(
         commandName: "doctor",
         abstract: "Check calendar and reminder permissions.",

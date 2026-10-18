@@ -185,6 +185,16 @@ agenda mcp                      # the same, over MCP on stdio
 
 `describe` is built from the parser's own definitions, so it cannot drift from what the tool accepts.
 
+**Safety (1.2, CLIKit 0.20).** Every command declares whether it reads or acts; `describe` tags
+them `[reads]`/`[acts]` and `mcp` sends the matching `readOnlyHint`/`destructiveHint`/`idempotentHint`.
+`--read-only` (or `CLIKIT_READ_ONLY=1`) refuses `add`, `done`, `edit`, `move`, `delete`, `join` and
+`open` with exit 2 before anything is touched — `join --print`, `open --print` and `--dry-run` still
+run. Text other people can write — event and reminder titles, locations, notes, organizers and
+attendee names, from invitations and shared calendars — is fenced in `<<untrusted:TOKEN>>…<</untrusted:TOKEN>>`
+when piped (`--no-wrap-untrusted` turns it off); ids, dates, links and calendar names are not, since
+they are values you hand back. Calendar.app's AppleScript runs through CLIKit's `OSAScript`, with a
+hard timeout (8 s for the hidden-calendars check) that kills a hung script.
+
 ## MCP
 
 `agenda mcp` serves the same functionality over the Model Context Protocol (stdio), so

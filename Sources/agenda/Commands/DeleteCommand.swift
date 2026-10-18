@@ -21,6 +21,9 @@ import Foundation
 /// exactly what did — by id and title, so it can be looked up in a backup afterwards.
 struct DeleteCommand: AgendaVerb, MutatingCommand {
 
+    /// Deletes; a second delete finds nothing to remove.
+    static let commandEffect = CommandEffect.acting(destructive: true, idempotent: true)
+
     static let actionName = "delete"
 
     static let configuration = CommandConfiguration(

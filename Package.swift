@@ -16,7 +16,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
-        .package(url: "https://github.com/arraypress/swift-cli-kit.git", from: "0.11.0"),
+        .package(url: "https://github.com/arraypress/swift-cli-kit.git", from: "0.20.0"),
         .package(url: "https://github.com/arraypress/swift-agenda-kit.git", from: "0.2.0"),
     ],
     targets: [
@@ -30,6 +30,12 @@ let package = Package(
             ],
             path: "Sources/agenda",
             exclude: ["Info.plist"],
+            swiftSettings: [
+                // CLIKit (0.13.1+) builds with this, so `CLICommand.execute()` is
+                // nonisolated(nonsending); a conformer compiled without it sends `self`
+                // across an isolation boundary on every await and Swift 6 refuses.
+                .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+            ],
             linkerSettings: [
                 // A bare SPM executable has no bundle, so TCC finds no usage strings and
                 // the EventKit prompt never appears. Embedding the plist in __TEXT gives

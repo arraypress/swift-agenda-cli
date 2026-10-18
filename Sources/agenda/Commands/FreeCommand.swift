@@ -15,6 +15,8 @@ import Foundation
 
 struct FreeCommand: AgendaVerb {
 
+    static let commandEffect = CommandEffect.readOnly
+
     static let configuration = CommandConfiguration(
         commandName: "free",
         abstract: "Find gaps long enough to schedule something.",

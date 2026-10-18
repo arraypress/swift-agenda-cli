@@ -15,6 +15,9 @@ import Foundation
 
 struct AddCommand: AgendaVerb, MutatingCommand {
 
+    /// Creates; overwrites nothing. Twice makes two.
+    static let commandEffect = CommandEffect.acting(destructive: false)
+
     static let actionName = "add"
 
     static let configuration = CommandConfiguration(

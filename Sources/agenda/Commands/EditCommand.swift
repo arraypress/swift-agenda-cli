@@ -15,6 +15,9 @@ import Foundation
 
 struct EditCommand: AgendaVerb, MutatingCommand {
 
+    /// Overwrites fields; the same edit twice leaves the same event.
+    static let commandEffect = CommandEffect.acting(destructive: true, idempotent: true)
+
     static let actionName = "edit"
 
     static let configuration = CommandConfiguration(

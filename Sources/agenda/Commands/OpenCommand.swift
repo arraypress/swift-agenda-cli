@@ -17,7 +17,13 @@ import Foundation
 /// BusyCal.
 ///
 /// NO ENVELOPE, like `join`: it changes what is on screen, not what is in the calendar.
-struct OpenCommand: AgendaVerb {
+struct OpenCommand: AgendaVerb, ConditionallyActing {
+
+    /// Brings another app to a day or event; changes no data. With --print it only prints.
+    static let commandEffect = CommandEffect.acting(destructive: false, idempotent: true)
+
+    /// --read-only lets a `--print` run through: it opens nothing.
+    var actsThisRun: Bool { !printOnly }
 
     static let configuration = CommandConfiguration(
         commandName: "open",

@@ -15,6 +15,8 @@ import Foundation
 
 struct RemindersCommand: AgendaVerb {
 
+    static let commandEffect = CommandEffect.readOnly
+
     static let configuration = CommandConfiguration(
         commandName: "reminders",
         abstract: "List reminders.",

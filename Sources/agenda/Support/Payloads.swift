@@ -26,8 +26,22 @@ import AgendaKit
 import CLIKit
 import Foundation
 
+/// The fields of an event or reminder that someone else may have written.
+///
+/// A shared or subscribed calendar, or an invitation, puts another person's words in the
+/// title, the location, the notes, the organizer and the attendees' names — so they are
+/// fenced in `<<untrusted:…>>` markers whenever CLIKit's policy says to (piped, by
+/// default). `title` also reaches a structured location's title. Ids, dates, URLs and the
+/// calendar or list NAME are not: the name is what `--calendar` takes back, and a call or
+/// event link is what `join`/`open` hand to another app, so a marker would break both.
+enum AgendaUntrusted {
+    static let fields: Set<String> = ["title", "location", "notes", "organizer", "name"]
+}
+
 /// One event.
-struct EventPayload: Encodable, TextRenderable {
+struct EventPayload: Encodable, TextRenderable, UntrustedContent {
+
+    static var untrustedFields: Set<String> { AgendaUntrusted.fields }
 
     let event: AgendaEvent
 
@@ -40,7 +54,9 @@ struct EventPayload: Encodable, TextRenderable {
 }
 
 /// One reminder.
-struct ReminderPayload: Encodable, TextRenderable {
+struct ReminderPayload: Encodable, TextRenderable, UntrustedContent {
+
+    static var untrustedFields: Set<String> { AgendaUntrusted.fields }
 
     let reminder: AgendaReminder
 
@@ -53,7 +69,9 @@ struct ReminderPayload: Encodable, TextRenderable {
 }
 
 /// One search hit, which may be either kind.
-struct SearchPayload: Encodable, TextRenderable {
+struct SearchPayload: Encodable, TextRenderable, UntrustedContent {
+
+    static var untrustedFields: Set<String> { AgendaUntrusted.fields }
 
     let result: SearchResult
 
@@ -112,7 +130,9 @@ struct CalendarPayload: Encodable, TableRenderable {
 ///
 /// The event's identifying fields and its `videoCall`, under the same names an event
 /// carries, plus `opened` — so a caller can tell a printed link from a launched one.
-struct JoinPayload: Encodable, TextRenderable {
+struct JoinPayload: Encodable, TextRenderable, UntrustedContent {
+
+    static var untrustedFields: Set<String> { AgendaUntrusted.fields }
 
     let event: AgendaEvent
     let call: VideoCall
@@ -138,7 +158,7 @@ struct JoinPayload: Encodable, TextRenderable {
     func renderText() -> String {
         guard opened else { return call.url }
         let when = "\(Output.clock.string(from: event.startsAt))–\(Output.clock.string(from: event.endsAt))"
-        return "Joining \(call.service.displayName): \(event.title)  \(when)\n    \(call.url)"
+        return "Joining \(call.service.displayName): \(Untrusted.text(event.title))  \(when)\n    \(call.url)"
     }
 }
 
@@ -146,7 +166,9 @@ struct JoinPayload: Encodable, TextRenderable {
 ///
 /// Exactly one of `url` and `script` is present: Calendar.app has no link for a date, so a
 /// day there is the AppleScript that drives it.
-struct OpenPayload: Encodable, TextRenderable {
+struct OpenPayload: Encodable, TextRenderable, UntrustedContent {
+
+    static var untrustedFields: Set<String> { AgendaUntrusted.fields }
 
     let app: CalendarApp
     let date: Date
@@ -179,7 +201,7 @@ struct OpenPayload: Encodable, TextRenderable {
             case .script(let script): return script
             }
         }
-        let subject = event.map { "\"\($0.title)\"" } ?? Output.day.string(from: date)
+        let subject = event.map { "\"\(Untrusted.text($0.title))\"" } ?? Output.day.string(from: date)
         return "Opened \(subject) in \(app.displayName)."
     }
 }

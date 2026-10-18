@@ -15,6 +15,8 @@ import Foundation
 
 struct SearchCommand: AgendaVerb {
 
+    static let commandEffect = CommandEffect.readOnly
+
     static let configuration = CommandConfiguration(
         commandName: "search",
         abstract: "Find events and reminders matching some text.",

@@ -17,7 +17,13 @@ import Foundation
 ///
 /// NO ENVELOPE. This writes nothing to the calendar, so there is no plan to show and nothing
 /// to record; `--print` is the way to see the link without acting on it.
-struct JoinCommand: AgendaVerb {
+struct JoinCommand: AgendaVerb, ConditionallyActing {
+
+    /// Launches the call in its app. With --print it only prints the link.
+    static let commandEffect = CommandEffect.acting(destructive: false, idempotent: false)
+
+    /// --read-only lets a `--print` run through: it opens nothing.
+    var actsThisRun: Bool { !printOnly }
 
     static let configuration = CommandConfiguration(
         commandName: "join",

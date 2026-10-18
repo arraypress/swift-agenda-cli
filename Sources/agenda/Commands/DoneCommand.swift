@@ -15,6 +15,9 @@ import Foundation
 
 struct DoneCommand: AgendaVerb {
 
+    /// Sets a completion flag; doing it twice changes nothing more.
+    static let commandEffect = CommandEffect.acting(destructive: false, idempotent: true)
+
     static let configuration = CommandConfiguration(
         commandName: "done",
         abstract: "Mark a reminder complete.",

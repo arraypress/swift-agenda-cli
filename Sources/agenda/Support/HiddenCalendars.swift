@@ -27,6 +27,7 @@
 //
 
 import AgendaKit
+import CLIKit
 import EventKit
 import Foundation
 
@@ -46,21 +47,25 @@ enum HiddenCalendars {
         return shown.filter { !known.contains($0.lowercased()) && !lists.contains($0.lowercased()) }
     }
 
-    /// Calendar.app's own list of calendar titles.
-    private static func ask() -> [String]? {
-        let script = "tell application \"Calendar\" to return title of every calendar"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", script]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return nil }
+    /// The script that asks Calendar.app for its calendar titles.
+    static let script = "tell application \"Calendar\" to return title of every calendar"
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        return String(decoding: data, as: UTF8.self)
+    /// How long the courtesy check may take. Shorter than CLIKit's 15 s default: it only
+    /// ever runs after an empty answer, and a Calendar.app stuck behind a dialog must not
+    /// hold that answer hostage.
+    static let timeout: Double = 8
+
+    /// Calendar.app's own list of calendar titles, or `nil` when it cannot be asked.
+    ///
+    /// Through CLIKit's `OSAScript`: a hard timeout that kills a hung osascript (this used
+    /// to wait for ever on a Calendar.app showing a dialog), both pipes read together.
+    /// The parameters are the seam the tests use to hang it on purpose.
+    static func ask(script: String = script, timeout: Double = timeout,
+                    executable: URL = OSAScript.osascript,
+                    started: (@Sendable (Int32) -> Void)? = nil) -> [String]? {
+        guard let output = try? OSAScript.run(script, timeout: timeout, executable: executable, started: started)
+        else { return nil }
+        return output
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }

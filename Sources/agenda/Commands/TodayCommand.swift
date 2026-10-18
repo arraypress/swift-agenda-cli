@@ -20,6 +20,8 @@ import Foundation
 /// with events that are not today's.
 struct TodayCommand: AgendaVerb {
 
+    static let commandEffect = CommandEffect.readOnly
+
     static let configuration = CommandConfiguration(
         commandName: "today",
         abstract: "Everything on today — events, plus reminders due.",
@@ -107,6 +109,8 @@ struct TodayCommand: AgendaVerb {
 
 /// `agenda tomorrow` — the same day's worth, one day along.
 struct TomorrowCommand: AgendaVerb {
+
+    static let commandEffect = CommandEffect.readOnly
 
     static let configuration = CommandConfiguration(
         commandName: "tomorrow",

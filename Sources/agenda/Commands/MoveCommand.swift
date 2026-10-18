@@ -15,6 +15,9 @@ import Foundation
 
 struct MoveCommand: AgendaVerb, MutatingCommand {
 
+    /// Overwrites the time; the same move twice lands in the same place.
+    static let commandEffect = CommandEffect.acting(destructive: true, idempotent: true)
+
     static let actionName = "move"
 
     static let configuration = CommandConfiguration(
