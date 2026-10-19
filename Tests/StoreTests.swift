@@ -229,10 +229,11 @@ final class TagWriteTests: XCTestCase {
         var inputs: [[String: Any]] = []
         var effect: ([String], inout [String]) throws -> Void = { given, tags in tags = given }
 
-        var found: [String] = ["Call Bob"]
+        /// What the helper's filter finds; `nil`: exactly the title asked about.
+        var found: [String]?
         func writer() -> TagWriter {
             var writer = TagWriter()
-            writer.check = { [self] _ in found }
+            writer.check = { [self] title in found ?? [title] }
             writer.run = { [self] given in
                 // The input as the helper would get it: through its JSON.
                 let data = try JSONEncoder().encode(given)
@@ -317,13 +318,30 @@ final class TagWriteTests: XCTestCase {
         XCTAssertNoThrow(try TitleMatch.requireUnique("Call Alice", id: nil, in: [mine]))
     }
 
+    func testNothingRunsUnlessTheFilterFindsExactlyTheOneReminder() throws {
+        // Measured on Notes: Find Notes ignored its filter and acted on every note.
+        for found in [["Hello Claude", "Other"], [], ["Someone else"]] {
+            let fake = Fake()
+            fake.found = found
+            XCTAssertThrowsError(try fake.writer().apply(TagPlan.make(current: [], add: ["x"], remove: []), id: "R", title: "Hello Claude")) {
+                XCTAssertEqual(($0 as? CLIError)?.retry, .notStarted)
+            }
+            XCTAssertTrue(fake.inputs.isEmpty, "\(found): the helper must not have run")
+        }
+        let fake = Fake()
+        fake.found = ["hello claude"]
+        XCTAssertNoThrow(try fake.writer().apply(TagPlan.make(current: fake.tags["R"]!, add: ["x"], remove: []), id: "R", title: "Hello Claude"))
+    }
+
     func testTheHelperSetsAndNeverAdds() throws {
         let helper = try TagShortcuts.helper
         let recipe = helper.recipe
         XCTAssertEqual(recipe.name, "agenda · Set Tags")
-        XCTAssertEqual(helper.version, 1)
+        XCTAssertEqual(helper.version, 2)
+        XCTAssertTrue(helper.findsByFilter)
         XCTAssertEqual(recipe.actions.first?.action, "is.workflow.actions.comment", "the marker comes first")
-        XCTAssertEqual(recipe.actions.last?.action, "is.workflow.actions.nothing", "no output, so no output prompt")
+        XCTAssertEqual(recipe.actions.last?.action, "is.workflow.actions.output", "a quiet Stop and Output: nothing shown")
+        XCTAssertEqual(recipe.actions.last?.parameters["WFNoOutputSurfaceBehavior"], .string("Do Nothing"))
         XCTAssertFalse(recipe.actions.contains { $0.action == "com.apple.reminders.AddOrRemoveTagsAppIntent" },
                        "refused on import on the Mac")
         let edit = try XCTUnwrap(recipe.actions.first { $0.action == "is.workflow.actions.setters.reminders" })
@@ -364,7 +382,8 @@ final class TagWriteTests: XCTestCase {
         XCTAssertFalse(before.installed)
         XCTAssertEqual(Set(before.obsolete), ["agenda add tags", "agenda set tags"])
         XCTAssertTrue(before.obsoleteNote?.contains("can be deleted") ?? false)
-        let clean = try TagShortcuts.status(host: Library([InstalledShortcut(id: "9", name: helper.name, marker: helper.marker)]))
+        let clean = try TagShortcuts.status(host: Library([InstalledShortcut(id: "9", name: helper.name, marker: helper.marker,
+                                                                             noInputBehavior: "WFWorkflowNoInputBehaviorShowError")]))
         XCTAssertTrue(clean.installed)
         XCTAssertNil(clean.obsoleteNote)
     }
