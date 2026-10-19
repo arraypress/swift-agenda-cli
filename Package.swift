@@ -17,7 +17,9 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         .package(url: "https://github.com/arraypress/swift-cli-kit.git", from: "0.20.0"),
-        .package(url: "https://github.com/arraypress/swift-agenda-kit.git", from: "0.2.0"),
+        .package(url: "https://github.com/arraypress/swift-agenda-kit.git", from: "0.3.0"),
+        // Tags are written through a helper shortcut (EventKit has no tag API).
+        .package(url: "https://github.com/arraypress/swift-apple-shortcuts.git", from: "0.1.0"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -25,6 +27,7 @@ let package = Package(
             name: "agenda",
             dependencies: [
                 .product(name: "AgendaKit", package: "swift-agenda-kit"),
+                .product(name: "AppleShortcuts", package: "swift-apple-shortcuts"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "CLIKit", package: "swift-cli-kit"),
             ],

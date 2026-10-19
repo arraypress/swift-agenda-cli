@@ -33,7 +33,7 @@ struct AgendaCommand: AsyncParsableCommand, ServiceProviding {
             Dates accept plain language — now, today, tomorrow, next friday, +2d,
             "tomorrow 9am" — as well as ISO 8601 like 2026-07-19T14:00.
             """,
-        version: "1.2.0",
+        version: "1.3.0",
         subcommands: [
             EventsCommand.self,
             TodayCommand.self,
@@ -48,6 +48,9 @@ struct AgendaCommand: AsyncParsableCommand, ServiceProviding {
             EditCommand.self,
             MoveCommand.self,
             DeleteCommand.self,
+            TagCommand.self,
+            TagsCommand.self,
+            SmartListsCommand.self,
             CalendarsCommand.self,
             DoctorCommand.self,
             DescribeCommand<AgendaCommand>.self,

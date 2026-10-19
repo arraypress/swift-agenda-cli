@@ -34,8 +34,33 @@ import Foundation
 /// default). `title` also reaches a structured location's title. Ids, dates, URLs and the
 /// calendar or list NAME are not: the name is what `--calendar` takes back, and a call or
 /// event link is what `join`/`open` hand to another app, so a marker would break both.
+///
+/// A reminder's `tags` and `section`, and a smart list's `name` and `rules`, are authored
+/// text from the Reminders store — on a shared list, someone else's — so they are fenced too.
 enum AgendaUntrusted {
-    static let fields: Set<String> = ["title", "location", "notes", "organizer", "name"]
+    static let fields: Set<String> = ["title", "location", "notes", "organizer", "name",
+                                      "tags", "section", "rules"]
+}
+
+/// The store's keys on a reminder: present only when the store was read and has the row,
+/// so an absent `tags` means "unknown", never "none".
+private enum StoreKeys: String, CodingKey { case tags, section, parentID }
+
+private func encodeStoreDetails(_ details: ReminderStoreDetails?, to encoder: Encoder) throws {
+    guard let details else { return }
+    var container = encoder.container(keyedBy: StoreKeys.self)
+    try container.encode(details.tags, forKey: .tags)
+    try container.encodeIfPresent(details.section, forKey: .section)
+    try container.encodeIfPresent(details.parentID, forKey: .parentID)
+}
+
+/// A rendered entry pushed right by its depth, the first line marked as a subtask.
+func indented(_ text: String, depth: Int) -> String {
+    guard depth > 0 else { return text }
+    let pad = String(repeating: "    ", count: depth)
+    return text.split(separator: "\n", omittingEmptySubsequences: false).enumerated()
+        .map { $0.offset == 0 ? String(pad.dropLast(2)) + "↳ " + $0.element : pad + $0.element }
+        .joined(separator: "\n")
 }
 
 /// One event.
@@ -60,11 +85,28 @@ struct ReminderPayload: Encodable, TextRenderable, UntrustedContent {
 
     let reminder: AgendaReminder
 
-    init(_ reminder: AgendaReminder) { self.reminder = reminder }
+    /// Tags, section and parent from the Reminders store, when it was read.
+    let details: ReminderStoreDetails?
 
-    func encode(to encoder: Encoder) throws { try reminder.encode(to: encoder) }
+    /// How far under its parent this prints; text only.
+    let depth: Int
 
-    func renderText() -> String { Output.line(reminder) }
+    init(_ reminder: AgendaReminder, details: ReminderStoreDetails? = nil, depth: Int = 0) {
+        self.reminder = reminder
+        self.details = details
+        self.depth = depth
+    }
+
+    init(_ placed: PlacedReminder) {
+        self.init(placed.reminder, details: placed.details, depth: placed.depth)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try reminder.encode(to: encoder)
+        try encodeStoreDetails(details, to: encoder)
+    }
+
+    func renderText() -> String { indented(Output.line(reminder, details: details), depth: depth) }
 
 }
 
@@ -75,11 +117,20 @@ struct SearchPayload: Encodable, TextRenderable, UntrustedContent {
 
     let result: SearchResult
 
-    init(_ result: SearchResult) { self.result = result }
+    /// The store's details for a reminder hit.
+    let details: ReminderStoreDetails?
 
-    func encode(to encoder: Encoder) throws { try result.encode(to: encoder) }
+    init(_ result: SearchResult, store: ReminderStoreContents? = nil) {
+        self.result = result
+        if case .reminder(let reminder) = result { details = store?.details(for: reminder.id) } else { details = nil }
+    }
 
-    func renderText() -> String { Output.line(result) }
+    func encode(to encoder: Encoder) throws {
+        try result.encode(to: encoder)
+        try encodeStoreDetails(details, to: encoder)
+    }
+
+    func renderText() -> String { Output.line(result, details: details) }
 
 }
 

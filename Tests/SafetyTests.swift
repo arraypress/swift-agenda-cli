@@ -121,14 +121,15 @@ final class AgendaEffectTests: XCTestCase {
     /// Every verb that acts, invoked so that it would parse — never run.
     private let acting: [[String]] = [
         ["add", "Lunch"], ["done", "R-1"], ["edit", "R-1", "--title", "x"], ["move", "EV-1", "--to", "tomorrow"],
-        ["delete", "EV-1"], ["join"], ["open", "today"],
+        ["delete", "EV-1"], ["join"], ["open", "today"], ["tag", "R-1", "--add", "x", "--yes"], ["tag", "--install", "--yes"],
+        ["add", "Lunch", "--remind", "--tag", "x", "--yes"],
     ]
 
     func testEveryCommandDeclaresWhatItDoes() {
         XCTAssertEqual(CommandEffects.undeclared(in: AgendaCommand.self), [])
         XCTAssertEqual(CommandEffects.refusedUnderReadOnly(in: AgendaCommand.self),
                        ["agenda add", "agenda delete", "agenda done", "agenda edit", "agenda join",
-                        "agenda move", "agenda open"])
+                        "agenda move", "agenda open", "agenda tag"])
     }
 
     func testReadOnlyRefusesEveryActingVerbWithExitTwo() throws {
@@ -147,7 +148,10 @@ final class AgendaEffectTests: XCTestCase {
     func testReadsAndPrintOnlyRunsPassReadOnly() throws {
         for arguments in [["events"], ["today"], ["tomorrow"], ["reminders"], ["search", "x"], ["free", "30m"],
                           ["calendars"], ["doctor"], ["join", "--print"], ["open", "today", "--print"],
-                          ["delete", "EV-1", "--dry-run"]] {
+                          ["delete", "EV-1", "--dry-run"], ["tags"], ["smartlists"],
+                          ["tag", "R-1", "--add", "x", "--dry-run"],
+                          // Plan unless --yes: without it, these only show what they would do.
+                          ["tag", "R-1", "--add", "x"], ["tag", "--install"], ["add", "Lunch", "--remind", "--tag", "x"]] {
             let command = try AgendaCommand.parseAsRoot(arguments + ["--read-only"])
             XCTAssertNoThrow(try ReadOnlyMode.check(command, environment: [:]), "\(arguments)")
         }
@@ -164,6 +168,9 @@ final class AgendaEffectTests: XCTestCase {
         XCTAssertEqual(hints("add"), ["readOnlyHint": false, "destructiveHint": false, "idempotentHint": false])
         XCTAssertEqual(hints("done"), ["readOnlyHint": false, "destructiveHint": false, "idempotentHint": true])
         XCTAssertEqual(hints("join")["readOnlyHint"], false)
+        XCTAssertEqual(hints("tag"), ["readOnlyHint": false, "destructiveHint": true, "idempotentHint": true])
+        XCTAssertEqual(hints("tags"), ["readOnlyHint": true])
+        XCTAssertEqual(hints("smartlists"), ["readOnlyHint": true])
     }
 }
 

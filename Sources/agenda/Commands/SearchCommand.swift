@@ -72,6 +72,8 @@ struct SearchCommand: AgendaVerb {
             calendars: calendar
         )
 
-        try emit(hits.map(SearchPayload.init), empty: "Nothing matching \"\(query)\".", options: common)
+        let store = wantReminders && hits.contains(where: \.isReminder) ? StoreDetails.load() : nil
+        store?.warn(common)
+        try emit(hits.map { SearchPayload($0, store: store?.contents) }, empty: "Nothing matching \"\(query)\".", options: common)
     }
 }

@@ -6,6 +6,7 @@ A command-line tool and Swift library for Apple Calendar and Reminders — query
 
 - 📅 **Event queries** — `agenda events --next 7d` lists what's coming, including anything already in progress; `--from`/`--to` for an explicit range, `--calendar` to narrow, `--conflicts` for double-bookings
 - ✅ **Reminders** — `agenda reminders --due 7d`, `--overdue`, `--all`; open items first, undated ones kept and sorted last
+- 🏷️ **Tags, sections, subtasks, smart lists** — read from Reminders' own store, which EventKit cannot see: `#tags` and `§ section` on every reminder, subtasks printed under their parent, `--tag`/`--section` filters, one list's view grouped by section, `agenda tags`, `agenda smartlists`. Tags are written through Shortcuts with `agenda tag` and `add --tag` (see [Tags, sections and subtasks](#tags-sections-and-subtasks))
 - 🕳️ **Free-time search** — `agenda free 90m --within 2w` walks the calendar and returns real gaps, merging back-to-back meetings and clipping to working hours (`--any-time` to lift that)
 - ↻ **Full recurrence** — daily/weekly/monthly/yearly with `--every N`, `--on MO,WE,FR`, `--on-day 1,15`, `--nth last`, and `--until`/`--times` end conditions. Round-trips through EventKit without loss
 - ⏰ **Alarms** — repeatable `--alert 1d --alert 15m`, relative or absolute
@@ -96,6 +97,11 @@ agenda events --conflicts                 # double-bookings
 # Reminders
 agenda reminders --due 7d
 agenda reminders --overdue
+agenda reminders --tag errands
+agenda reminders --list Groceries         # grouped by section, subtasks under their parent
+agenda tags                               # every tag, with counts
+agenda smartlists                         # smart lists and their rules
+agenda tag <id> --add errands --yes       # through Shortcuts; once: agenda tag --install --yes
 
 # Find something
 agenda search flight                      # events AND reminders, incl. notes/location
@@ -176,6 +182,54 @@ try Agenda.createEvent(EventDraft(
 ))
 ```
 
+## Tags, sections and subtasks
+
+EventKit has no API for any of them, so they are read from Reminders' own store
+(`~/Library/Group Containers/group.com.apple.reminders/Container_v1/Stores/Data-*.sqlite`). The
+store and its write-ahead log are cloned into a private folder and read there — a read-only open of
+a live WAL database still writes into its `-shm` — so Reminders' files are only ever read as bytes.
+The column layout was taken from ReminderKit's own Core Data model (v2026_A, macOS 27): a scratch
+store built from it matched the live one column for column.
+
+- **Joined by id.** A store row's identifier is the reminder's EventKit id; measured on this Mac,
+  1 of 1 EventKit reminders joined (the store held no other live rows). `agenda doctor` reports the
+  join for yours.
+- **Needs Full Disk Access** for the terminal. Without it — or with no store, or a store shaped
+  differently — reminders print as before, without tags, and one note on stderr says why. `--tag`,
+  `--section`, `tags` and `smartlists` cannot answer without the store and exit 3 (access) or 5.
+- **JSON:** `tags` (an array, empty when there are none), `section` and `parentID`, present only
+  when the store was read — an absent `tags` means unknown, not none. Tags, section names and
+  smart-list names and rules are authored text, fenced as untrusted when piped.
+- **Sections and smart-list rules are decoded leniently and were not seen live.** The store this was
+  built on had no sections and no smart lists; the section membership format follows ReminderKit's
+  own field names, and smart-list rules are printed as stored (`key: value`), uninterpreted.
+
+**Writing tags goes through Shortcuts.** Measured on macOS 27:
+
+- A `#word` saved through EventKit stays text.
+- Shortcuts' "New Reminder" action has no tags parameter.
+- Reminders' "Add or Remove Tags" App Intent is in the action catalogue but is **refused on the
+  Mac**: a shortcut containing it will not import ("features not supported on this device").
+- Shortcuts' "Edit Reminder" works on Tags, but its **Add mode behaves as Set**. A live add replaced
+  a reminder's four tags with the one being added; the read-back caught it.
+
+So there is one helper shortcut, **"agenda set tags"**, which SETS a reminder's whole tag list.
+agenda reads the current tags from the store, adds `--add`, drops `--remove`, and sets exactly that.
+For `add --remind --tag`, the target is just the given tags. Adding a shortcut takes a click, so
+install it once with `agenda tag --install --yes` and click **Add Shortcut**. The `agenda add tags`
+and `agenda remove tags` helpers from the first design are unused and can be deleted; `tag`,
+`--install` and `doctor` say so when they find them. Then:
+
+- writes show the plan (`#before → #after`) and change nothing without `--yes`;
+- the helper finds the reminder **by title**, so a title another reminder (open or done, any list)
+  shares is refused with exit 2 rather than guessed;
+- **the race:** Set overwrites. The tags are read again just before the helper runs, but a tag added
+  in Reminders in the second between that read and the set is lost;
+- success is **read back from the store** by id and must be exactly the target, no tag more or fewer.
+  Otherwise the command exits 5, naming the expected and the stored tags, with `retry` `not_started`
+  (nothing changed) or `may_have_completed`. For `add`, the reminder exists either way, so it says
+  `completed`: retrying would create a second one.
+
 ## For agents
 
 ```bash
@@ -187,7 +241,7 @@ agenda mcp                      # the same, over MCP on stdio
 
 **Safety (1.2, CLIKit 0.20).** Every command declares whether it reads or acts; `describe` tags
 them `[reads]`/`[acts]` and `mcp` sends the matching `readOnlyHint`/`destructiveHint`/`idempotentHint`.
-`--read-only` (or `CLIKIT_READ_ONLY=1`) refuses `add`, `done`, `edit`, `move`, `delete`, `join` and
+`--read-only` (or `CLIKIT_READ_ONLY=1`) refuses `add`, `done`, `edit`, `move`, `delete`, `tag`, `join` and
 `open` with exit 2 before anything is touched — `join --print`, `open --print` and `--dry-run` still
 run. Text other people can write — event and reminder titles, locations, notes, organizers and
 attendee names, from invitations and shared calendars — is fenced in `<<untrusted:TOKEN>>…<</untrusted:TOKEN>>`

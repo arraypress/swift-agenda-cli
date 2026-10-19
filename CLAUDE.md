@@ -35,6 +35,12 @@ agenda add "Dentist" --at "tomorrow 9am" --for 45m --alert 1d
 agenda add "Standup" --at "monday 9:30am" --repeat weekly --on MO,TU,WE,TH,FR
 agenda add "Pay rent" --remind --at 2026-08-01 --all-day --repeat monthly --on-day 1
 
+agenda reminders --tag errands           # tags/sections/subtasks from Reminders' store
+agenda reminders --list Groceries --section Produce
+agenda tags                               # tag names with counts
+agenda smartlists                         # read-only, with their rules
+agenda tag <id> --add errands --yes       # via a helper shortcut; plan without --yes
+
 agenda move <id> --to "next friday 10am" --dry-run
 agenda edit <id> --priority 1 --due "friday 5pm"    # reminders
 agenda done <id>
@@ -65,5 +71,15 @@ Things that will bite otherwise:
 - **`agenda open` on a day in Calendar.app runs AppleScript** and needs Automation
   permission (exit 3 if refused). Google Calendar and Fantastical open an event on its day.
 - **`--timezone Asia/Tokyo`** computes and displays in that zone, on any command.
+
+- **Tags, sections, subtasks and smart lists come from Reminders' own store** (a private
+  copy, never written; needs Full Disk Access). Without it reminders still print, with a
+  note on stderr, and `--tag`/`--section`/`tags`/`smartlists` exit 3. JSON `tags` absent
+  means unknown, `[]` means none.
+- **Tag writes go through Shortcuts** and need the one helper "agenda set tags", from
+  `agenda tag --install --yes` (the user must click Add Shortcut). It SETS the whole tag
+  list (current + --add − --remove), so a tag added elsewhere mid-write is lost. It finds
+  the reminder by title: a shared title is refused (exit 2). The store must then show
+  exactly the target, or the command exits 5.
 
 Full flags: `agenda help <subcommand>`.

@@ -108,8 +108,13 @@ enum Output {
         return formatter
     }()
 
-    static func line(_ reminder: AgendaReminder) -> String {
+    static func line(_ reminder: AgendaReminder, details: ReminderStoreDetails? = nil) -> String {
         var parts = [reminder.isCompleted ? "[x]" : "[ ]", Untrusted.text(reminder.title)]
+        // Tags and the section are authored text from the store, fenced like the title.
+        if let tags = details?.tags, !tags.isEmpty {
+            parts.append(Untrusted.text(tags.map { "#\($0)" }.joined(separator: " ")))
+        }
+        if let section = details?.section { parts.append("§ \(Untrusted.text(section))") }
         if let due = reminder.dueAt {
             // An all-day reminder has no time of day; rendering one shows "12:00 AM"
             // and reads as a midnight alert that was never set.
@@ -124,10 +129,10 @@ enum Output {
     }
 
     /// Renders a search hit, tagging which kind it is so a mixed list stays readable.
-    static func line(_ result: SearchResult) -> String {
+    static func line(_ result: SearchResult, details: ReminderStoreDetails? = nil) -> String {
         switch result {
         case .event(let event):       return "event     " + line(event)
-        case .reminder(let reminder): return "reminder  " + line(reminder)
+        case .reminder(let reminder): return "reminder  " + line(reminder, details: details)
         }
     }
 

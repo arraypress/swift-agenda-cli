@@ -59,6 +59,39 @@ struct DoctorCommand: AgendaVerb {
                      remedy: nil)
     }
 
+    /// Whether the Reminders store can be read for tags, sections and subtasks, and how
+    /// well it joins to EventKit. A note, never a failure: the store is optional.
+    private func storeCheck() async -> Check {
+        switch StoreDetails.load() {
+        case .unavailable(let error):
+            return Check(name: "Reminders store", status: "not read — \(error.localizedDescription)", remedy: nil)
+        case .read(let contents):
+            var status = "readable · model \(contents.modelVersion ?? "unknown")"
+                + (contents.isKnownVersion ? "" : " (unverified)") + " · \(contents.storeCount) store files"
+            if Agenda.access(to: .reminder) == .authorized,
+               let all = try? await Agenda.reminders(matching: ReminderFilter(includeCompleted: true)) {
+                let join = RemindersStore.join(eventKitIDs: all.map(\.id), with: contents)
+                status += " · \(join.matched)/\(join.matched + join.eventKitOnly) reminders joined"
+            }
+            return Check(name: "Reminders store", status: status, remedy: nil)
+        }
+    }
+
+    /// Whether the tag-writing helper shortcut is installed, and any obsolete ones are.
+    /// A note, never a failure: only tag writes need it.
+    private func tagHelperCheck() -> Check {
+        guard let status = try? TagShortcuts.status() else {
+            return Check(name: "Tag helper", status: "could not list your shortcuts", remedy: nil)
+        }
+        var text = status.installed
+            ? "\"\(TagShortcuts.name)\" installed"
+            : "not installed — tag writes need it: agenda tag --install --yes"
+        if !status.obsolete.isEmpty {
+            text += " · \(status.obsolete.map { "\"\($0)\"" }.joined(separator: " and ")) unused — delete in Shortcuts"
+        }
+        return Check(name: "Tag helper", status: text, remedy: nil)
+    }
+
     func execute() async throws {
         try zone.apply()
         if fix {
@@ -75,7 +108,7 @@ struct DoctorCommand: AgendaVerb {
             Check(name: "Reminders",
                   status: Agenda.access(to: .reminder).rawValue,
                   remedy: Agenda.access(to: .reminder).remedy)
-        ] + [calendarGap()].compactMap { $0 }
+        ] + [calendarGap()].compactMap { $0 } + [await storeCheck(), tagHelperCheck()]
 
         try common.emitter.emitAll(checks)
         if common.format == .text, checks.contains(where: { $0.remedy != nil }) {

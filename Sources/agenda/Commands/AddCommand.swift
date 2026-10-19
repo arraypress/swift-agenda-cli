@@ -30,6 +30,13 @@ struct AddCommand: AgendaVerb, MutatingCommand {
             agenda add "Dentist" --at 2026-07-22T10:00 --alert 1d --alert 30m
 
             Pass --dry-run to print what would be created without saving.
+
+            agenda add "Buy stamps" --remind --tag errands --yes
+
+            --tag (reminders only) goes through Shortcuts — EventKit cannot write tags — so \
+            it needs the helpers from `agenda tag --install`, a title no other reminder has, \
+            and --yes; without --yes the plan is shown and nothing is created. The tags are \
+            read back from the Reminders store before the result is reported.
             """
     )
 
@@ -72,6 +79,12 @@ struct AddCommand: AgendaVerb, MutatingCommand {
     @Option(name: .long, help: "Priority for reminders, 1 (highest) to 9.")
     var priority: Int = 0
 
+    @Option(name: .long, help: "Tag for a reminder (no #), set through Shortcuts. Repeatable; needs --yes.")
+    var tag: [String] = []
+
+    @Flag(name: .long, help: "With --tag: do it. Without, only the plan is shown.")
+    var yes = false
+
     @OptionGroup var repeats: RecurrenceOptions
 
     @OptionGroup var zone: ZoneOptions
@@ -83,6 +96,14 @@ struct AddCommand: AgendaVerb, MutatingCommand {
     // "Would create event: …" as prose, and a printResult that reimplemented the emitter.
     // That is the envelope, hand-written, in one file. Now it is the shared one, and
     // --dry-run answers in the same shape every other tool does.
+
+    /// Untagged, a create runs as it always has. Tagged, it goes through Shortcuts and is
+    /// shown first unless --yes, like every other write that leaves EventKit.
+    var isPlanOnly: Bool { write.dryRun || (!tag.isEmpty && !yes) }
+
+    func validate() throws {
+        if !tag.isEmpty, !remind { throw ValidationError("--tag is for reminders: add --remind.") }
+    }
 
     func plan() async throws -> [Change] {
         try zone.apply()
@@ -98,6 +119,18 @@ struct AddCommand: AgendaVerb, MutatingCommand {
             try await Agenda.requestAccess(to: .reminder)
             detail["kind"] = "reminder"
             if at != nil { detail["due"] = Output.stamp.string(from: start) }
+            if !tag.isEmpty {
+                let tags = TagPlan.make(current: [], add: tag, remove: []).target
+                detail["tags"] = TagCommand.render(tags)
+                do {
+                    let all = try await Agenda.reminders(matching: ReminderFilter(includeCompleted: true))
+                    try TitleMatch.requireUnique(title, id: nil, in: all)
+                    _ = try StoreDetails.load().require(for: "--tag")
+                    try TagShortcuts.requireInstalled()
+                } catch let error as CLIError {
+                    throw error.retry == nil ? error.with(retry: .notStarted) : error
+                }
+            }
             return [Change(.created, subject: title, to: calendar ?? "the default list",
                            detail: detail)]
         }
@@ -130,9 +163,25 @@ struct AddCommand: AgendaVerb, MutatingCommand {
                     list: calendar
                 )
                 let created = try Agenda.createReminder(draft)
-                // The new id is the thing worth having afterwards — every other verb takes
-                // one — so it becomes the subject and the title moves into the detail.
-                return [Change(.created, subject: created.id, to: created.list, detail: detail)]
+                guard !tag.isEmpty else {
+                    // The new id is the thing worth having afterwards — every other verb takes
+                    // one — so it becomes the subject and the title moves into the detail.
+                    return [Change(.created, subject: created.id, to: created.list, detail: detail)]
+                }
+                // Created either way from here: a retry would make a second one.
+                let plan = TagPlan.make(current: [], add: tag, remove: [])
+                do {
+                    let landed = try TagWriter().apply(plan, id: created.id, title: created.title)
+                    return [Change(.created, subject: created.id, to: created.list,
+                                   detail: detail.merging(["tags": TagCommand.render(landed),
+                                                           "verified": "read back from the Reminders store"]) { _, new in new },
+                                   retry: .completed)]
+                } catch let error as CLIError {
+                    throw CLIError(code: error.code,
+                                   message: "Created reminder \(created.id), but its tags did not land — \(error.message)",
+                                   hint: "agenda tag \(created.id) --add \(plan.target.joined(separator: " --add ")) --yes",
+                                   service: "agenda", retry: .completed)
+                }
             }
             let end = allDay ? start : start.addingTimeInterval(try Agenda.duration(length))
             let draft = EventDraft(

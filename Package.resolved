@@ -1,13 +1,22 @@
 {
-  "originHash" : "7ba37ffaaaad21ade57f22d08f5c78bc7a1315e624220d207557a0728bbfb81d",
+  "originHash" : "9ec3b3f6ab59202bbea1b526020c2ef7a8a8bb608204f83e55eb1fa889d3ae68",
   "pins" : [
     {
       "identity" : "swift-agenda-kit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/arraypress/swift-agenda-kit.git",
       "state" : {
-        "revision" : "1b91fd8c60ea48b21bcc19854ca6f0650f10bfbf",
-        "version" : "0.2.0"
+        "revision" : "3bb8466a5ece84636cacc377cf60f77dac49e592",
+        "version" : "0.3.0"
+      }
+    },
+    {
+      "identity" : "swift-apple-shortcuts",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arraypress/swift-apple-shortcuts.git",
+      "state" : {
+        "revision" : "e86366d80aed6db5f05e1fb2ff3998529f26552b",
+        "version" : "0.1.0"
       }
     },
     {

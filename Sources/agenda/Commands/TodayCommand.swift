@@ -75,8 +75,10 @@ struct TodayCommand: AgendaVerb {
             else { try common.emitter.emitAll([SearchPayload]()) }
             return
         }
+        let store = hits.contains(where: \.isReminder) ? StoreDetails.load() : nil
+        store?.warn(common)
         if common.format == .text { Terminal.writeLine(label) }
-        try common.emitter.emitAll(hits.map(SearchPayload.init))
+        try common.emitter.emitAll(hits.map { SearchPayload($0, store: store?.contents) })
     }
 
     /// Everything on the day, as typed results.
