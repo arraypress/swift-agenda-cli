@@ -30,9 +30,9 @@ struct TagCommand: AgendaVerb, MutatingCommand {
 
             Shows the plan and changes nothing unless --yes is passed.
 
-            EventKit cannot write tags, so this runs a helper shortcut ("agenda add tags" / \\
-            "agenda remove tags") that Reminders' "Add or Remove Tags" action does the work \\
-            in. Adding a shortcut needs your click: --install opens Shortcuts' Add sheet. \\
+            EventKit cannot write tags, so this runs the helper shortcut "agenda · Set Tags" \\
+            (Edit Reminder, setting the whole tag list). Adding it needs your click: --install \\
+            opens Shortcuts' Add sheet once. \\
             The helper finds the reminder by title, so a reminder whose title another \\
             reminder shares is refused (exit 2). Success is read back from the Reminders \\
             store; tags that do not land exit 5 with "retry" saying whether anything changed.

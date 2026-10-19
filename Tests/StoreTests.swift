@@ -229,9 +229,13 @@ final class TagWriteTests: XCTestCase {
         var inputs: [[String: Any]] = []
         var effect: ([String], inout [String]) throws -> Void = { given, tags in tags = given }
 
+        var found: [String] = ["Call Bob"]
         func writer() -> TagWriter {
             var writer = TagWriter()
-            writer.run = { [self] data in
+            writer.check = { [self] _ in found }
+            writer.run = { [self] given in
+                // The input as the helper would get it: through its JSON.
+                let data = try JSONEncoder().encode(given)
                 let input = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
                 inputs.append(input)
                 var current = tags["R"] ?? []
@@ -314,9 +318,11 @@ final class TagWriteTests: XCTestCase {
     }
 
     func testTheHelperSetsAndNeverAdds() throws {
-        let recipe = TagShortcuts.recipe()
-        XCTAssertEqual(recipe.name, "agenda set tags")
-        XCTAssertEqual(recipe.actions.first?.action, "is.workflow.actions.detect.dictionary")
+        let helper = try TagShortcuts.helper
+        let recipe = helper.recipe
+        XCTAssertEqual(recipe.name, "agenda · Set Tags")
+        XCTAssertEqual(helper.version, 1)
+        XCTAssertEqual(recipe.actions.first?.action, "is.workflow.actions.comment", "the marker comes first")
         XCTAssertEqual(recipe.actions.last?.action, "is.workflow.actions.nothing", "no output, so no output prompt")
         XCTAssertFalse(recipe.actions.contains { $0.action == "com.apple.reminders.AddOrRemoveTagsAppIntent" },
                        "refused on import on the Mac")
@@ -333,23 +339,38 @@ final class TagWriteTests: XCTestCase {
               case .dictionary(let only)? = templates.first else { return XCTFail("no title filter") }
         XCTAssertEqual(only["Property"], .string("Title"))
         XCTAssertEqual(only["Operator"], .integer(4))
-
-        let input = String(decoding: try TagShortcuts.input(title: "Call \"Bob\"", tags: ["a", "b"]), as: UTF8.self)
-        XCTAssertEqual(input, #"{"tags":["a","b"],"title":"Call \"Bob\""}"#)
+        XCTAssertEqual(TagShortcuts.input(title: "Call \"Bob\"", tags: ["a", "b"]),
+                       ["title": .string("Call \"Bob\""), "tags": .array([.string("a"), .string("b")])])
+        XCTAssertEqual(Set(helper.replaces), ["agenda add tags", "agenda remove tags", "agenda set tags"])
     }
 
-    func testObsoleteHelpersAreNamed() {
-        let both = TagShortcuts.Status(names: ["agenda add tags", "agenda remove tags", "Other"])
-        XCTAssertFalse(both.installed)
-        XCTAssertEqual(both.obsolete, ["agenda add tags", "agenda remove tags"])
-        XCTAssertTrue(both.obsoleteNote?.contains("can be deleted") ?? false)
-        let clean = TagShortcuts.Status(names: ["agenda set tags"])
+    /// A Shortcuts that answers from a list.
+    final class Library: HelperHost, @unchecked Sendable {
+        var entries: [InstalledShortcut]
+        init(_ entries: [InstalledShortcut]) { self.entries = entries }
+        func installed() throws -> [InstalledShortcut] { entries }
+        func write(_ recipe: Recipe, to folder: URL) throws -> URL { folder }
+        func offer(_ file: URL) throws {}
+        func run(_ name: String, input: Data?, patience: Double, timeout: Double, onWaiting: (@Sendable () -> Void)?) throws -> RunResult {
+            RunResult(output: Data(), duration: 0)
+        }
+    }
+
+    func testObsoleteHelpersAreNamedAndTheNewOneMustBeCurrent() throws {
+        let helper = try TagShortcuts.helper
+        let old = Library([InstalledShortcut(id: "1", name: "agenda add tags"), InstalledShortcut(id: "2", name: "agenda set tags"),
+                           InstalledShortcut(id: "3", name: "Other")])
+        let before = try TagShortcuts.status(host: old)
+        XCTAssertFalse(before.installed)
+        XCTAssertEqual(Set(before.obsolete), ["agenda add tags", "agenda set tags"])
+        XCTAssertTrue(before.obsoleteNote?.contains("can be deleted") ?? false)
+        let clean = try TagShortcuts.status(host: Library([InstalledShortcut(id: "9", name: helper.name, marker: helper.marker)]))
         XCTAssertTrue(clean.installed)
         XCTAssertNil(clean.obsoleteNote)
     }
 
     func testTheHelperBuildsStrictlyAgainstThisMacsCatalogue() throws {
         guard let builder = try? ShortcutBuilder() else { throw XCTSkip("no Shortcuts action catalogue here") }
-        XCTAssertNoThrow(try builder.build(TagShortcuts.recipe()))
+        XCTAssertNoThrow(try builder.build(try TagShortcuts.helper.recipe))
     }
 }

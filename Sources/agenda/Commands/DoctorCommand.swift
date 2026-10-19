@@ -85,7 +85,7 @@ struct DoctorCommand: AgendaVerb {
         }
         var text = status.installed
             ? "\"\(TagShortcuts.name)\" installed"
-            : "not installed — tag writes need it: agenda tag --install --yes"
+            : "\(status.summary) — tag writes need it: agenda tag --install --yes"
         if !status.obsolete.isEmpty {
             text += " · \(status.obsolete.map { "\"\($0)\"" }.joined(separator: " and ")) unused — delete in Shortcuts"
         }

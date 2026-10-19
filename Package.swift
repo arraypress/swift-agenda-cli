@@ -19,7 +19,7 @@ let package = Package(
         .package(url: "https://github.com/arraypress/swift-cli-kit.git", from: "0.20.0"),
         .package(url: "https://github.com/arraypress/swift-agenda-kit.git", from: "0.3.0"),
         // Tags are written through a helper shortcut (EventKit has no tag API).
-        .package(url: "https://github.com/arraypress/swift-apple-shortcuts.git", from: "0.1.0"),
+        .package(path: "../swift-apple-shortcuts"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.

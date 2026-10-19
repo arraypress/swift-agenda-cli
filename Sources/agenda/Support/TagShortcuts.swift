@@ -24,10 +24,12 @@
 //    the reminder should end with — what the store shows now, plus --add,
 //    minus --remove — and the helper sets exactly that.
 //  - Adding a shortcut takes a person's click (Shortcuts has no headless
-//    import). The one helper, "agenda set tags", is offered by
-//    `agenda tag --install`, and every write checks it is there first. The
-//    earlier "agenda add tags" / "agenda remove tags" helpers are obsolete and
-//    can be deleted; `tag` and `doctor` say so when they find them.
+//    import). The one helper, "agenda · Set Tags" — the fleet helper catalogue's
+//    `agenda.set-tags`, in swift-apple-shortcuts — is offered by
+//    `agenda tag --install`, and every write checks it is installed and
+//    current first, and runs it by identifier. The helpers from before the
+//    catalogue ("agenda set tags", "agenda add tags", "agenda remove tags")
+//    are obsolete; `tag` and `doctor` say so when they find them.
 //  - The helper finds the reminder BY TITLE — no Shortcuts filter takes an
 //    identifier — so a write is refused unless exactly one reminder (open or
 //    completed, any list) has that title.
@@ -47,95 +49,30 @@ import Foundation
 
 enum TagShortcuts {
 
-    /// The helper's name — what it is added and run under.
-    static let name = "agenda set tags"
-
-    /// Helpers from the first design, which could not work on the Mac.
-    static let obsoleteNames = ["agenda add tags", "agenda remove tags"]
-
-    /// The helper. Input is JSON — `{"title": …, "tags": […]}` — and the tags are
-    /// the reminder's whole list afterwards.
-    static func recipe() -> Recipe {
-        func variable(_ name: String) -> PlistValue {
-            .dictionary(["Value": .dictionary(["Type": .string("Variable"), "VariableName": .string(name)]),
-                         "WFSerializationType": .string("WFTextTokenAttachment")])
+    /// The helper, from the fleet's catalogue.
+    static var helper: Helper {
+        get throws {
+            guard let helper = try HelperCatalogue.builtIn().helper("agenda.set-tags") else {
+                throw CLIError.upstream("this build has no agenda.set-tags helper", service: "agenda")
+            }
+            return helper
         }
-        let titleToken: PlistValue = .dictionary([
-            "Value": .dictionary([
-                "string": .string("\u{FFFC}"),
-                "attachmentsByRange": .dictionary(["{0, 1}": .dictionary(["Type": .string("Variable"),
-                                                                          "VariableName": .string("agendaTitle")])]),
-            ]),
-            "WFSerializationType": .string("WFTextTokenString"),
-        ])
-        let titleIs: PlistValue = .dictionary([
-            "Value": .dictionary([
-                "WFActionParameterFilterPrefix": .integer(1),
-                "WFContentPredicateBoundedDate": .bool(false),
-                "WFActionParameterFilterTemplates": .array([.dictionary([
-                    "Operator": .integer(4),     // "is"
-                    "Property": .string("Title"),
-                    "Removable": .bool(true),
-                    "Values": .dictionary(["Unit": .integer(4), "String": titleToken]),
-                ])]),
-            ]),
-            "WFSerializationType": .string("WFContentPredicateTableTemplate"),
-        ])
-        return Recipe(name: name, actions: [
-            RecipeStep(action: "is.workflow.actions.detect.dictionary", parameters: ["WFInput": .string("$input")]),
-            RecipeStep(action: "is.workflow.actions.setvariable",
-                       parameters: ["WFVariableName": .string("agendaInput"), "WFInput": .string("$previous")]),
-            RecipeStep(action: "is.workflow.actions.getvalueforkey",
-                       parameters: ["WFGetDictionaryValueType": .string("Value"), "WFDictionaryKey": .string("tags"),
-                                    "WFInput": variable("agendaInput")]),
-            RecipeStep(action: "is.workflow.actions.setvariable",
-                       parameters: ["WFVariableName": .string("agendaTags"), "WFInput": .string("$previous")]),
-            RecipeStep(action: "is.workflow.actions.getvalueforkey",
-                       parameters: ["WFGetDictionaryValueType": .string("Value"), "WFDictionaryKey": .string("title"),
-                                    "WFInput": variable("agendaInput")]),
-            RecipeStep(action: "is.workflow.actions.setvariable",
-                       parameters: ["WFVariableName": .string("agendaTitle"), "WFInput": .string("$previous")]),
-            RecipeStep(action: "is.workflow.actions.filter.reminders", parameters: ["WFContentItemFilter": titleIs]),
-            // "Edit Reminder", SET mode only — see the header for why not Add.
-            RecipeStep(action: "is.workflow.actions.setters.reminders", parameters: [
-                "WFInput": .string("$previous"),
-                "WFContentItemPropertyName": .string("Tags"),
-                "Mode": .string("Set"),
-                "WFReminderContentItemTags": variable("agendaTags"),
-            ]),
-            // Ends on nothing, so a run has no output for Shortcuts to ask about.
-            RecipeStep(action: "is.workflow.actions.nothing"),
-        ])
     }
+
+    /// The helper's name — what it is added under: "agenda · Set Tags".
+    static var name: String { (try? helper.name) ?? "agenda · Set Tags" }
 
     /// The JSON the helper is run with.
-    static func input(title: String, tags: [String]) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(["title": .string(title), "tags": .tags(tags)] as [String: InputValue])
+    static func input(title: String, tags: [String]) -> [String: PlistValue] {
+        ["title": .string(title), "tags": .array(tags.map(PlistValue.string))]
     }
 
-    enum InputValue: Encodable {
-        case string(String), tags([String])
-        func encode(to encoder: Encoder) throws {
-            var container = encoder.singleValueContainer()
-            switch self {
-            case .string(let value): try container.encode(value)
-            case .tags(let value): try container.encode(value)
-            }
-        }
-    }
-
-    /// What the library holds: whether the helper is there, and which obsolete
-    /// helpers are.
+    /// What the library holds: whether the helper is there and runnable, and
+    /// which obsolete helpers are.
     struct Status: Equatable {
         let installed: Bool
+        let summary: String
         let obsolete: [String]
-
-        init(names: Set<String>) {
-            installed = names.contains(TagShortcuts.name)
-            obsolete = TagShortcuts.obsoleteNames.filter(names.contains)
-        }
 
         /// The line to print about obsolete helpers, or `nil` when there are none.
         var obsoleteNote: String? {
@@ -145,47 +82,43 @@ enum TagShortcuts {
         }
     }
 
-    static func status() throws -> Status {
+    static func status(host: any HelperHost = LiveHelperHost()) throws -> Status {
         do {
-            return Status(names: Set(try ShortcutLibrary().shortcuts().map(\.name)))
+            let helper = try helper
+            let status = try helper.status(host: host)
+            let stale = try HelperCatalogue.builtIn().stale(for: "agenda", host: host)
+            return Status(installed: status.isRunnable, summary: status.summary, obsolete: stale.map { $0.installedName ?? $0.name })
+        } catch let error as CLIError {
+            throw error
         } catch {
             throw CLIError.upstream("Could not list your shortcuts: \(error.localizedDescription)", service: "agenda")
         }
     }
 
-    /// Refuses, before anything is attempted, when the helper is missing.
-    /// Mentions obsolete helpers on stderr either way.
+    /// Refuses, before anything is attempted, unless the helper is installed
+    /// and current. Mentions obsolete helpers on stderr either way.
     @discardableResult
     static func requireInstalled() throws -> Status {
         let status = try status()
         if let note = status.obsoleteNote { Terminal.writeError(note) }
         guard status.installed else {
             throw CLIError(code: .authRequired,
-                           message: "Tags are written through Shortcuts, and \"\(name)\" is not in your library",
+                           message: "Tags are written through Shortcuts, and \"\(name)\" is \(status.summary)",
                            hint: "agenda tag --install --yes, then click Add Shortcut",
                            service: "agenda", retry: .notStarted)
         }
         return status
     }
 
-    /// Where offered helper files are written. Shortcuts reads the file after
-    /// `open` returns, so it must outlive this process.
-    static var folder: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/agenda/shortcuts")
-    }
-
-    /// Writes, signs and offers the helper: Shortcuts shows its Add sheet.
+    /// Writes, signs and offers the helper: Shortcuts shows its Add sheet once.
     static func offer() throws -> URL {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let file = try ShortcutBuilder().write(recipe(), to: folder)
-        try ShortcutBuilder.offer(file)
-        return file
+        try helper.offer()
     }
 
-    /// Runs the helper and waits — up to 30 s, since Shortcuts may first ask
-    /// on screen whether it may use Reminders.
-    static func run(input: Data) throws {
-        _ = try ShortcutRunner.run(name, input: input, patience: 5, timeout: 30, onWaiting: {
+    /// Runs the helper by identifier and waits — up to its timeout, since
+    /// Shortcuts may first ask on screen whether it may use Reminders.
+    static func run(input: [String: PlistValue]) throws {
+        _ = try helper.run(input, onWaiting: {
             Terminal.writeError("Waiting on Shortcuts — it may be asking for permission on screen.")
         })
     }

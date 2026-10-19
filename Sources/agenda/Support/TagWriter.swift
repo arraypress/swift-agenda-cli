@@ -57,7 +57,12 @@ struct TagPlan: Equatable {
 struct TagWriter {
 
     /// Runs the helper.
-    var run: (Data) throws -> Void = TagShortcuts.run
+    var run: ([String: PlistValue]) throws -> Void = { try TagShortcuts.run(input: $0) }
+
+    /// What the helper's title filter finds, run in check mode (changes nothing).
+    var check: (String) throws -> [String] = { title in
+        try TagShortcuts.helper.check(["title": .string(title), "tags": .array([])])
+    }
 
     /// The reminder's tags as the store has them now; `nil` while it has no row.
     var readTags: (String) throws -> [String]? = { id in
@@ -73,9 +78,21 @@ struct TagWriter {
     /// - Throws: A ``CLIError`` naming what was expected and what the store
     ///   shows, with the verdict the store supports.
     func apply(_ plan: TagPlan, id: String, title: String) throws -> [String] {
+        // The helper SETS tags on whatever its filter finds. Before it acts, it
+        // is asked what it would find: exactly this one reminder, or nothing runs.
+        let found = try check(title)
+        let wanted = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard found.count == 1, found[0].lowercased() == wanted else {
+            throw CLIError(code: .upstream,
+                           message: "The tag helper's filter finds \(found.count) reminder\(found.count == 1 ? "" : "s") for \"\(title)\""
+                               + (found.isEmpty ? "" : " (\(found.prefix(3).joined(separator: ", "))\(found.count > 3 ? ", …" : ""))")
+                               + ", not exactly this one — nothing was changed",
+                           hint: "the helper would have set tags on every reminder it found; check the reminder's title in Reminders",
+                           service: "agenda", retry: .notStarted)
+        }
         var runFailure: Error?
         do {
-            try run(try TagShortcuts.input(title: title, tags: plan.target))
+            try run(TagShortcuts.input(title: title, tags: plan.target))
         } catch {
             runFailure = error
         }
