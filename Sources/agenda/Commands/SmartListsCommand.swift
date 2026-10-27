@@ -20,8 +20,8 @@ struct SmartListsCommand: AgendaVerb {
         commandName: "smartlists",
         abstract: "List Reminders' smart lists and their rules (read-only).",
         discussion: """
-            Read from Reminders' own store (a private copy; needs Full Disk Access for \\
-            the terminal). Rules are the stored filter printed as key: value, uninterpreted. \\
+            Read from Reminders' own store (a private copy; needs Full Disk Access for \
+            the terminal). Rules are the stored filter printed as key: value, uninterpreted. \
             Built-in lists (today, flagged…) have no name of their own. --all includes them.
             """
     )
