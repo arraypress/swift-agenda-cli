@@ -74,7 +74,9 @@ enum Output {
         let title = Untrusted.text(event.title)
         var parts = [""]
         if event.isAllDay {
-            parts[0] = "\(stamp.string(from: event.startsAt).prefix(12)) all day  \(title)"
+            // The date alone, from the date formatter: cutting the date-and-time
+            // string at 12 characters left "8 Dec 2026 a" ("at") on one-digit days.
+            parts[0] = "\(day.string(from: event.startsAt)) all day  \(title)"
         } else {
             parts[0] = "\(stamp.string(from: event.startsAt))–\(clock.string(from: event.endsAt))  \(title)"
         }
